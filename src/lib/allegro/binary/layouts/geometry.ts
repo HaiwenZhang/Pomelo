@@ -1,0 +1,158 @@
+import type { Raw as RawRecord, Reader } from "../reader";
+
+/** 0x01 */
+export function readArc(reader: Reader, formatVersion: number): RawRecord {
+  const record: RawRecord = {};
+  reader.skip(1);
+  record.UnknownByte = reader.u8();
+  record.SubType = reader.u8();
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.Parent = reader.u32();
+  record.Unknown1 = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown6 = reader.u32();
+  }
+  record.Width = reader.u32();
+  record.StartX = reader.i32();
+  record.StartY = reader.i32();
+  record.EndX = reader.i32();
+  record.EndY = reader.i32();
+  record.CenterX = reader.float();
+  record.CenterY = reader.float();
+  record.Radius = reader.float();
+  record.BoundingBoxCoords = reader.i32(4);
+  return record;
+}
+
+/** 0x0e */
+export function readFootprintRectangle(
+  reader: Reader,
+  formatVersion: number,
+): RawRecord {
+  const record: RawRecord = {};
+  record.T = reader.u8();
+  record.Layer = reader.u16();
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.FpPtr = reader.u32();
+  record.Unknown1 = reader.u32();
+  record.Unknown2 = reader.u32();
+  record.Unknown3 = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown4 = reader.u32();
+    record.Unknown5 = reader.u32();
+  }
+  record.Coords = reader.i32(4);
+  record.UnknownArr = reader.u32(3);
+  record.Rotation = reader.u32();
+  return record;
+}
+
+/** 0x14 */
+export function readGraphic(reader: Reader, formatVersion: number): RawRecord {
+  const record: RawRecord = {};
+  record.Type = reader.u8();
+  record.Layer = reader.u16();
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.Parent = reader.u32();
+  record.Flags = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown2 = reader.u32();
+  }
+  record.SegmentPtr = reader.u32();
+  record.Ptr0x03 = reader.u32();
+  record.Ptr0x26 = reader.u32();
+  return record;
+}
+
+/** 0x15 / 0x16 / 0x17 */
+export function readSegment(reader: Reader, formatVersion: number): RawRecord {
+  const record: RawRecord = {};
+  reader.skip(3);
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.Parent = reader.u32();
+  record.Flags = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown2 = reader.u32();
+  }
+  record.Width = reader.u32();
+  record.StartX = reader.i32();
+  record.StartY = reader.i32();
+  record.EndX = reader.i32();
+  record.EndY = reader.i32();
+  return record;
+}
+
+/** 0x24 */
+export function readRectangle(
+  reader: Reader,
+  formatVersion: number,
+): RawRecord {
+  const record: RawRecord = {};
+  record.Type = reader.u8();
+  record.Layer = reader.u16();
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.Parent = reader.u32();
+  record.Unknown1 = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown2 = reader.u32();
+  }
+  record.Coords = reader.i32(4);
+  record.Ptr2 = reader.u32();
+  record.Unknown3 = reader.u32();
+  record.Unknown4 = reader.u32();
+  record.Rotation = reader.u32();
+  return record;
+}
+
+/** 0x28 */
+export function readShape(reader: Reader, formatVersion: number): RawRecord {
+  const record: RawRecord = {};
+  record.Type = reader.u8();
+  record.Layer = reader.u16();
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.Ptr1 = reader.u32();
+  record.Unknown1 = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown2 = reader.u32();
+    record.Unknown3 = reader.u32();
+  }
+  record.Ptr2 = reader.u32();
+  record.Ptr3 = reader.u32();
+  record.FirstKeepoutPtr = reader.u32();
+  record.FirstSegmentPtr = reader.u32();
+  record.Unknown4 = reader.u32();
+  record.Unknown5 = reader.u32();
+  if (formatVersion >= 172) {
+    record.TablePtr = reader.u32();
+  }
+  record.Ptr6 = reader.u32();
+  if (formatVersion < 172) {
+    record.TablePtr_16x = reader.u32();
+  }
+  record.Coords = reader.i32(4);
+  return record;
+}
+
+/** 0x34 */
+export function readKeepout(reader: Reader, formatVersion: number): RawRecord {
+  const record: RawRecord = {};
+  record.T = reader.u8();
+  record.Layer = reader.u16();
+  record.Key = reader.u32();
+  record.Next = reader.u32();
+  record.Ptr1 = reader.u32();
+  if (formatVersion >= 172) {
+    record.Unknown1 = reader.u32();
+  }
+  record.Flags = reader.u32();
+  record.FirstSegmentPtr = reader.u32();
+  record.Ptr3 = reader.u32();
+  record.Unknown2 = reader.u32();
+  return record;
+}
