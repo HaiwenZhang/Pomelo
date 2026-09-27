@@ -498,7 +498,7 @@ test("per-layer Etch and Pin switches suppress only their own label candidates",
   ).toStrictEqual(before);
 });
 
-test("flipped automatic text keeps readable glyph axes while copper labels reflect", () => {
+test("flipped automatic text stays readable on traces, pads, drills, and copper", () => {
   const s = scene(),
     c = camera(100);
   s.segments = [segment(0.4, [-5, -5], [5, 5])];
@@ -548,7 +548,7 @@ test("flipped automatic text keeps readable glyph axes while copper labels refle
   const normal = layout(s, c);
   c.flipped = true;
   const flipped = layout(s, c);
-  for (const key of ["etch:0", "pin:0", "drill"]) {
+  for (const key of ["etch:0", "pin:0", "drill", "zone:9"]) {
     const data = flipped.get(key)!;
     expect(data.length > 0).toBeTruthy();
     for (let i = 0; i < data.length; i += 16) {
@@ -562,8 +562,44 @@ test("flipped automatic text keeps readable glyph axes while copper labels refle
   }
   expect(flipped.get("etch:0")![13] < 0).toBeTruthy(); // +45 degree world line now -45 degrees.
   expect(flipped.get("pin:0")![13] < 0).toBeTruthy();
-  expect(flipped.get("zone:9")).toStrictEqual(normal.get("zone:9")); // camera reflects entire layout
-  expect(flipped.get("zone:9")![14] * c.horizontalSign).toBe(-1);
+  expect(flipped.get("zone:9")).not.toStrictEqual(normal.get("zone:9"));
   c.flipped = false;
   expect(layout(s, c)).toStrictEqual(normal);
+});
+
+test("pin names remain upright for rotated pads on both board sides", () => {
+  const s = scene(),
+    c = camera(100);
+  s.pins = [
+    {
+      id: 3,
+      net: 1,
+      name: "A",
+      reference: "U1",
+      at: [0, 0],
+      angle: 0,
+      back: false,
+      drill: 0,
+      shapes: [{ layer: 0, type: 6, width: 2, height: 1, offset: [0, 0] }],
+    },
+  ];
+  for (const flipped of [false, true]) {
+    c.flipped = flipped;
+    for (const degrees of [0, 90, 180, 270, 360, 450]) {
+      s.pins[0].angle = (degrees * Math.PI) / 180;
+      const data = layout(s, c).get("pin:0")!;
+      expect(data.length).toBeGreaterThan(0);
+      const cos = data[12],
+        sin = data[13],
+        localSign = data[14];
+      expect(cos).toBeGreaterThanOrEqual(-1e-12);
+      expect(
+        c.horizontalSign * localSign * (cos * cos + sin * sin),
+      ).toBeCloseTo(1, 12);
+      if (degrees === 180) {
+        expect(cos).toBeCloseTo(1, 12);
+        expect(sin).toBeCloseTo(0, 12);
+      }
+    }
+  }
 });

@@ -86,8 +86,8 @@ export class BoardLabelLayout {
     }
     return [first, last];
   }
-  /** Automatic labels can cancel the camera's horizontal reflection locally.
-   * Stored design text and shape labels retain the board's reflection instead. */
+  /** Automatic labels cancel the camera's horizontal reflection locally.
+   * Stored design text retains the board's reflection instead. */
   static appendGlyphs({
     target,
     font,
@@ -324,13 +324,13 @@ export class BoardLabelLayout {
             p.height * 0.65,
           );
           if (size * camera.scale < 8) continue;
-          // Pin orientation follows the mirrored pad axis, while glyphs stay readable.
-          let angle = pin.angle;
-          if (camera.flipped) {
-            angle = Math.atan2(Math.sin(angle), -Math.cos(angle));
-            if (angle > Math.PI / 2) angle -= Math.PI;
-            if (angle < -Math.PI / 2) angle += Math.PI;
-          }
+          // Follow the pad axis, but keep the label readable from either side.
+          let angle = Math.atan2(
+            Math.sin(pin.angle),
+            Math.cos(pin.angle) * camera.horizontalSign,
+          );
+          if (angle > Math.PI / 2) angle -= Math.PI;
+          if (angle < -Math.PI / 2) angle += Math.PI;
           BoardLabelLayout.appendGlyphs({
             target: batch(`${category}:${p.layer}`),
             font,
@@ -386,7 +386,7 @@ export class BoardLabelLayout {
         // screen-relative labels, not a repeating tile grid. Fit smaller areas to
         // their visible bounds; the stencil still clips text at edges and holes.
         for (const t of [0.25, 0.5, 0.75]) {
-          // The viewport-relative pattern and its glyphs reflect together on Flip_Y.
+          // The viewport-relative pattern reflects on Flip_Y; keep its glyphs readable.
           const x = x0 + (x1 - x0) * t,
             y = y1 - (y1 - y0) * t;
           BoardLabelLayout.appendGlyphs({
@@ -397,6 +397,7 @@ export class BoardLabelLayout {
             height: size,
             angle: 0,
             color: [0.88, 0.91, 0.94, 0.62 * options.shapes],
+            horizontalSign: camera.horizontalSign,
             independentOpacity: true,
             verticalScale: LABEL_LAYOUT.zoneGlyphHeightRatio,
           });
