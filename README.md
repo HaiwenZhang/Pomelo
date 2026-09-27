@@ -5,6 +5,10 @@
 <h1 align="center">Pomelo · PCB Viewer</h1>
 
 <p align="center">
+  <strong><a href="https://haiwenzhang.github.io/pomelo/">Open Pomelo online</a></strong>
+</p>
+
+<p align="center">
   <strong>See every connection, layer by layer.</strong><br>
   A WebGPU-powered PCB viewer for Cadence Allegro, Altium Designer, ODB++,<br>
   PADS, Ansys HFSS 3D Layout, and KiCad in your browser, with your files kept local.

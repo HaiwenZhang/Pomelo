@@ -97,11 +97,15 @@ export class LabelAtlas extends LabelLayer {
   ): Promise<LabelAtlas> {
     const { labelShader } = await import("./shader-sources");
     const [metadata, blob] = await Promise.all([
-      fetch("/fonts/NotoSansSC-SemiBold.json").then((r) => {
-        if (!r.ok) throw new Error("字体度量加载失败");
-        return r.json();
-      }),
-      fetch("/fonts/NotoSansSC-SemiBold-msdf.png").then((r) => {
+      fetch(`${import.meta.env.BASE_URL}fonts/NotoSansSC-SemiBold.json`).then(
+        (r) => {
+          if (!r.ok) throw new Error("字体度量加载失败");
+          return r.json();
+        },
+      ),
+      fetch(
+        `${import.meta.env.BASE_URL}fonts/NotoSansSC-SemiBold-msdf.png`,
+      ).then((r) => {
         if (!r.ok) throw new Error("字形图集加载失败");
         return r.blob();
       }),
