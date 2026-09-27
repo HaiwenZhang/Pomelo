@@ -1,6 +1,8 @@
 import { additionalParserErrors } from "./parser-error-catalog";
+import japanese from "./ja.json";
+import traditionalChinese from "./zh-TW.json";
 
-export const translations = {
+const baseTranslations = {
   "zh-CN": {
     translation: {
       workspace: {
@@ -1203,6 +1205,49 @@ export const translations = {
         padsSlotPlating:
           "PADS {{detail}} slot plating property needs verification",
       },
+    },
+  },
+} as const;
+
+const english = baseTranslations.en.translation;
+
+export const translations = {
+  ...baseTranslations,
+  "zh-TW": { translation: traditionalChinese },
+  ja: {
+    translation: {
+      ...english,
+      workspace: { ...english.workspace, ...japanese.workspace },
+      search: { ...english.search, ...japanese.search },
+      display: { ...english.display, ...japanese.display },
+      layers: { ...english.layers, ...japanese.layers },
+      order: { ...english.order, ...japanese.order },
+      inspector: {
+        ...english.inspector,
+        ...japanese.inspector,
+        property: {
+          ...english.inspector.property,
+          ...japanese.inspector.property,
+        },
+      },
+      status: { ...english.status, ...japanese.status },
+      metadata: {
+        ...english.metadata,
+        ...japanese.metadata,
+        functions: {
+          ...english.metadata.functions,
+          ...japanese.metadata.functions,
+        },
+        encodings: {
+          ...english.metadata.encodings,
+          ...japanese.metadata.encodings,
+        },
+      },
+      progress: { ...english.progress, ...japanese.progress },
+      errors: { ...english.errors, ...japanese.errors },
+      parserErrors: { ...english.parserErrors, ...japanese.parserErrors },
+      hfssDefReasons: { ...english.hfssDefReasons, ...japanese.hfssDefReasons },
+      diagnostics: { ...english.diagnostics, ...japanese.diagnostics },
     },
   },
 } as const;

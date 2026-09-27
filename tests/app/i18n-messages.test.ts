@@ -19,6 +19,29 @@ test("progress shown in English retains the parser stage and object count", () =
   );
 });
 
+test("new languages localize parser progress and errors", () => {
+  const traditional = createViewerI18n("zh-TW");
+  const japanese = createViewerI18n("ja");
+  expect(localizePhase("构建层与网络", traditional)).toBe("構建層與網路");
+  expect(localizePhase("构建层与网络", japanese)).toBe(
+    "レイヤーとネットを構築中",
+  );
+  expect(localizeError("KiCad 表达式未闭合", traditional)).toBe(
+    "打開電路板失敗：KiCad 表達式未閉合",
+  );
+  expect(localizeError("KiCad 表达式未闭合", japanese)).toBe(
+    "基板を開けませんでした: KiCad の式が閉じられていません",
+  );
+  expect(
+    localizeDiagnostic("3 个设计铜区没有已保存填充，未重新铺铜", japanese),
+  ).toBe(
+    "設計上の銅箔領域 3 件に保存済みの塗りつぶしがなく、銅箔を再生成していません",
+  );
+  expect(localizeError("HFSS DEF 文件截断（偏移 0x20）", japanese)).toBe(
+    "基板を開けませんでした: HFSS DEF ファイルが途中で切れています (オフセット 0x20)",
+  );
+});
+
 test("build progress and dynamic format stages translate without losing counts or source names", () => {
   const translator = createViewerI18n("en");
   const examples = [

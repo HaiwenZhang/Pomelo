@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  English · <a href="REAME_cn.md">简体中文</a>
+  English · <a href="REAME_cn.md">简体中文</a> · <a href="README_zh-TW.md">繁體中文</a> · <a href="README_ja.md">日本語</a>
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@ Drag in a file, isolate the layers you care about, and inspect the connections. 
 - **Follow the signal.** Search by net name or component reference, jump to a result, and highlight an object, a connected trace, a whole net, or a component.
 - **Make dense layouts readable.** Color by layer or net, isolate layers, adjust display priority, and control copper opacity, pad fills, and labels.
 - **Inspect the details.** Hover for object information or use the inspector to examine properties; trace and net selections include routed length.
-- **Make room for the board.** Collapsible panels, a compact navigation toolbar, and English / 简体中文 interfaces keep the workspace easy to explore.
+- **Make room for the board.** Collapsible panels, a compact navigation toolbar, and English / 简体中文 / 繁體中文 / 日本語 interfaces keep the workspace easy to explore.
 
 > **Early development:** format coverage and visual fidelity are still evolving. Pomelo is a read-only viewer; it does not edit boards, run DRC, or replace verification in the source EDA tool. See the format notes below and the import diagnostics in **File information**.
 
@@ -126,20 +126,20 @@ With npm, replace `bun run` with `npm run` in the commands above. Use `bun run t
 
 The production output is a static site. Serve `dist/` from the site root over HTTPS, or use localhost for local viewing; WebGPU requires a secure context. No board-processing backend is needed.
 
-| Location                           | Purpose                                              |
-| ---------------------------------- | ---------------------------------------------------- |
-| [`src/app`](src/app)               | Workspace composition and renderer lifecycle         |
-| [`src/components`](src/components) | Layers, search, inspector, and display controls      |
-| [`src/lib`](src/lib)               | Format-specific importers, interaction, and geometry |
-| [`src/lib/board`](src/lib/board)   | Shared board model and display logic                 |
-| [`src/lib/render`](src/lib/render) | WebGPU renderer and WGSL shaders                     |
-| [`src/i18n`](src/i18n)             | English and Simplified Chinese resources             |
-| [`tests`](tests)                   | Parser, geometry, rendering, and interaction tests   |
+| Location                           | Purpose                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| [`src/app`](src/app)               | Workspace composition and renderer lifecycle                             |
+| [`src/components`](src/components) | Layers, search, inspector, and display controls                          |
+| [`src/lib`](src/lib)               | Format-specific importers, interaction, and geometry                     |
+| [`src/lib/board`](src/lib/board)   | Shared board model and display logic                                     |
+| [`src/lib/render`](src/lib/render) | WebGPU renderer and WGSL shaders                                         |
+| [`src/i18n`](src/i18n)             | English, Simplified Chinese, Traditional Chinese, and Japanese resources |
+| [`tests`](tests)                   | Parser, geometry, rendering, and interaction tests                       |
 
 ## Contributing
 
 Help make more boards easier to explore. Contributions are welcome in format compatibility, rendering accuracy, large-board performance, translations, and documentation.
 
 - **Found an import or display issue?** [Open an issue](https://github.com/HaiwenZhang/pomelo/issues) with the source tool and file version, browser / OS / GPU details, reproduction steps, and import diagnostics. A small, shareable sample or comparison screenshot is especially useful; remove confidential design data first.
-- **Working on a fix?** Include a focused regression test for parser or geometry changes and screenshots for visual changes. Keep the English and Chinese READMEs in sync when changing documented behavior.
+- **Working on a fix?** Include a focused regression test for parser or geometry changes and screenshots for visual changes. Keep all four language versions of the README in sync when changing documented behavior.
 - **Finding Pomelo useful?** Star the repository and share it with someone who spends time exploring PCBs. Real-world feedback helps prioritize the next compatibility improvements.

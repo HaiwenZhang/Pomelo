@@ -1,12 +1,21 @@
 import { createInstance } from "i18next";
 import { translations } from "./i18n/resources";
 
-export function createViewerI18n(language: string) {
+const supportedLanguages = ["en", "zh-CN", "zh-TW", "ja"] as const;
+
+function supportedLanguage(language: string | null): string {
+  return language &&
+    supportedLanguages.includes(language as (typeof supportedLanguages)[number])
+    ? language
+    : "en";
+}
+
+export function createViewerI18n(language = "en") {
   const translator = createInstance();
   void translator.init({
-    lng: language,
+    lng: supportedLanguage(language),
     fallbackLng: "en",
-    supportedLngs: ["zh-CN", "en"],
+    supportedLngs: supportedLanguages,
     resources: translations,
     interpolation: { escapeValue: false },
   });
@@ -14,9 +23,12 @@ export function createViewerI18n(language: string) {
 }
 
 function preferredLanguage(): string {
-  if (typeof window === "undefined") return "zh-CN";
-  const saved = window.localStorage.getItem("pcbviewer-language");
-  return saved ?? "zh-CN";
+  if (typeof window === "undefined") return "en";
+  try {
+    return supportedLanguage(window.localStorage.getItem("pcbviewer-language"));
+  } catch {
+    return "en";
+  }
 }
 
 export const viewerI18n = createViewerI18n(preferredLanguage());
