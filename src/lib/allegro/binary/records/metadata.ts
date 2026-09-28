@@ -8,8 +8,8 @@ export function readPairedNets(
   { version: formatVersion }: BrdHeader,
 ): RawRecord {
   // Paired-net metadata: V251 converted boards retain the 92-byte V174
-  // layout (V172 uses 88 bytes). Keep the opaque member words intact.
-  if (formatVersion !== 172 && formatVersion !== 174 && formatVersion !== 251) {
+  // layout (V15/V172 use 88 bytes). Keep the opaque member words intact.
+  if (![152, 157, 172, 174, 251].includes(formatVersion)) {
     throw parserError("brdUnverifiedMetadataRecord", { detail: formatVersion });
   }
   const record: RawRecord = {};
@@ -35,10 +35,14 @@ export function readConstraintSet(
   record.Key = reader.u32();
   record.Next = reader.u32();
   record.NameStrKey = reader.u32();
-  record.FieldPtr = reader.u32();
+  if (formatVersion >= 160) record.FieldPtr = reader.u32();
   const nameEntryCount = reader.u16();
   const layerDimensionCount = reader.u16();
-  reader.skip(nameEntryCount * 256 + layerDimensionCount * 56);
+  reader.skip(
+    nameEntryCount * 256 +
+      layerDimensionCount * (formatVersion < 160 ? 136 : 56) +
+      (formatVersion < 160 ? 12 : 0),
+  );
   if (formatVersion >= 172) reader.skip(4);
   return record;
 }

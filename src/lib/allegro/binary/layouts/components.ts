@@ -29,6 +29,16 @@ export function readComponentInstance(
   const record: RawRecord = {};
   reader.skip(3);
   record.Key = reader.u32();
+  if (formatVersion < 160) {
+    record.RefDes = reader.str(32);
+    record.Next = reader.u32();
+    record.FpInstPtr = reader.u32();
+    record.FunctionInstPtr = reader.u32();
+    record.X03Ptr = reader.u32();
+    record.Unknown5 = reader.u32();
+    record.FirstPadPtr = reader.u32();
+    return record;
+  }
   record.Next = reader.u32();
   if (formatVersion >= 172) {
     record.UnknownPtr1 = reader.u32();
@@ -55,7 +65,7 @@ export function readFunctionSlot(
   const record: RawRecord = {};
   reader.skip(3);
   record.Key = reader.u32();
-  record.SlotName = reader.u32();
+  record.SlotName = formatVersion < 160 ? reader.str(32) : reader.u32();
   if (formatVersion >= 174) {
     record.Unknown1 = reader.u32();
   }
@@ -82,6 +92,14 @@ export function readFunctionInstance(
   const record: RawRecord = {};
   reader.skip(3);
   record.Key = reader.u32();
+  if (formatVersion < 160) {
+    record.FunctionName = reader.str(32);
+    record.ComponentInstPtr = reader.u32();
+    record.PtrX12 = reader.u32();
+    record.Slots = reader.u32();
+    record.Fields = reader.u32();
+    return record;
+  }
   if (formatVersion >= 172) {
     record.Unknown1 = reader.u32();
   }
@@ -136,6 +154,22 @@ export function readFootprintInstance(
   record.Layer = reader.u8();
   record.UnknownByte2 = reader.u8();
   record.Key = reader.u32();
+  if (formatVersion < 160) {
+    record.Flags = reader.u32();
+    record.Rotation = reader.u32();
+    record.CoordX = reader.i32();
+    record.CoordY = reader.i32();
+    record.Next = reader.u32();
+    record.InstRef16x = reader.u32();
+    record.GraphicPtr = reader.u32();
+    record.FirstPadPtr = reader.u32();
+    record.TextPtr = reader.u32();
+    record.AssemblyPtr = reader.u32();
+    record.AreasPtr = reader.u32();
+    record.UnknownPtr1 = reader.u32();
+    record.UnknownPtr2 = reader.u32();
+    return record;
+  }
   record.Next = reader.u32();
   if (formatVersion >= 172) {
     record.Unknown1 = reader.u32();

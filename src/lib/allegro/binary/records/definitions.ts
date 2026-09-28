@@ -127,13 +127,14 @@ function getDefinitionEntryStride(
   const entryBytesByCode: Record<number, number> = {
     2: 88 + (formatVersion >= 164 ? 12 : 0) + (formatVersion >= 172 ? 8 : 0),
     3: (formatVersion >= 172 ? 64 : 32) + (formatVersion >= 174 ? 4 : 0),
-    5: 28 + (formatVersion >= 175 ? 4 : 0),
+    4: formatVersion < 160 ? 20 : 0,
+    5: formatVersion < 160 ? 16 : 28 + (formatVersion >= 175 ? 4 : 0),
     6: formatVersion >= 172 ? 8 : 208,
     [FONT_DEFINITION_CODE]:
       formatVersion >= 251
         ? 64
         : 32 + (formatVersion >= 174 ? 4 : 0) + (formatVersion >= 172 ? 32 : 0),
-    11: 1016,
+    11: formatVersion < 160 ? 254 : 1016,
     12: 232,
     13: 200,
     15: 20,

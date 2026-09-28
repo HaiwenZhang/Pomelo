@@ -37,7 +37,7 @@ export function readSignalIntegrityModel(
   // Present already in V162 (all eight SI records in at91sam9m10).
   // Omitting this word can mistake an empty model's Size for end-of-file.
   const versionFields =
-    formatVersion >= 162
+    formatVersion < 160 || formatVersion >= 162
       ? { Unknown2: reader.u16(), Unknown3: reader.u16() }
       : {};
   const stringPointer = reader.u32();

@@ -10,7 +10,7 @@ export function readDesignRuleCheck(
   record.Layer = reader.u16();
   record.Key = reader.u32();
   record.Next = reader.u32();
-  record.Unknown1 = reader.u32();
+  if (formatVersion >= 160) record.Unknown1 = reader.u32();
   if (formatVersion >= 172) {
     record.Unknown2 = reader.u32();
   }
@@ -112,13 +112,13 @@ export function readTable(reader: Reader, formatVersion: number): RawRecord {
     record.Unknown3 = reader.u32();
   }
   record.StringPtr = reader.u32();
-  if (formatVersion < 172) {
+  if (formatVersion >= 160 && formatVersion < 172) {
     record.Unknown4 = reader.u32();
   }
   record.Ptr1 = reader.u32();
   record.Ptr2 = reader.u32();
   record.Ptr3 = reader.u32();
-  record.Flags = reader.u32();
+  record.Flags = formatVersion < 160 ? 0 : reader.u32();
   return record;
 }
 

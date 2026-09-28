@@ -24,6 +24,22 @@ test("Allegro doubles contain high word followed by low word", () => {
   v.setUint32(4, 0, true);
   expect(new Reader(b).float()).toBe(1.5);
 });
+
+test("repeated Allegro doubles retain signed zero, subnormals, infinities and NaN", () => {
+  const values = [1.5, -123.75, -0, Number.MIN_VALUE, Infinity, -Infinity, NaN];
+  const buffer = new ArrayBuffer(values.length * 8),
+    view = new DataView(buffer);
+  const scratch = new DataView(new ArrayBuffer(8));
+  values.forEach((value, i) => {
+    scratch.setFloat64(0, value);
+    view.setUint32(i * 8, scratch.getUint32(0), true);
+    view.setUint32(i * 8 + 4, scratch.getUint32(4), true);
+  });
+  const reader = new Reader(buffer);
+  for (const value of values)
+    expect(Object.is(reader.float(), value)).toBe(true);
+  expect(() => reader.float()).toThrow(/exceeds the file/);
+});
 test("strings consume their padded storage", () => {
   const b = Uint8Array.from([65, 66, 0, 0, 7, 0, 0, 0]).buffer;
   const r = new Reader(b);

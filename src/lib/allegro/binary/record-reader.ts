@@ -35,7 +35,7 @@ const VARIABLE_RECORD_DECODERS = new Map<number, VariableRecordDecoder>([
   [0x3c, readKeyList],
 ]);
 
-/** Reads record bodies after the caller consumes the type byte. */
+/** Reads bodies after Reader.recordType consumes a modern or packed legacy tag. */
 export class AllegroRecordReader {
   constructor(
     readonly reader: Reader,

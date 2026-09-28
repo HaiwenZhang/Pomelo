@@ -10,6 +10,16 @@ export function readTextWrapper(
   record.Layer = reader.u16();
   record.Key = reader.u32();
   record.Next = reader.u32();
+  if (formatVersion < 160) {
+    record.Unknown4 = reader.u32();
+    record.Rotation = reader.u32();
+    record.Font16x = reader.u32();
+    record.CoordsX = reader.u32();
+    record.CoordsY = reader.u32();
+    record.StrGraphicPtr = reader.u32();
+    record.PtrGroup_16x = reader.u32();
+    return record;
+  }
   if (formatVersion >= 172) {
     record.Unknown1 = reader.u32();
     record.Unknown2 = reader.u32();

@@ -27,6 +27,7 @@ type PadstackHeader = {
   SlotX: number;
   SlotY: number;
   PadType?: number;
+  RestrictedLayerSpan?: boolean;
   DrillMetadataWords?: number[];
 };
 export type PadstackRecord = PadstackHeader & {
@@ -48,7 +49,7 @@ export function readPadstack(
 ): PadstackRecord {
   reader.skip(1);
   const trailingEntryCount = reader.u8();
-  const startLayer = reader.u8();
+  let startLayer = reader.u8();
   const key = reader.u32();
   const next = reader.u32();
   const padString = reader.u32();
@@ -76,6 +77,28 @@ export function readPadstack(
   );
   const trailingEntryBytes = formatVersion < 172 ? 32 : 40;
   reader.skip(trailingEntryCount * trailingEntryBytes);
+  // V15 restricted stacks retain an array for every board layer. Later saves
+  // compact that array to the populated span (including blind/buried vias).
+  if (header.RestrictedLayerSpan) {
+    const populated: number[] = [];
+    for (let layer = 0; layer < header.LayerCount; layer++) {
+      const begin = fixedComponentCount + layer * componentsPerLayer;
+      if (
+        components
+          .slice(begin, begin + componentsPerLayer)
+          .some((c) => c.Type !== 0)
+      )
+        populated.push(layer);
+    }
+    if (populated.length) {
+      const first = populated[0],
+        last = populated[populated.length - 1];
+      components.splice(fixedComponentCount + (last + 1) * componentsPerLayer);
+      components.splice(fixedComponentCount, first * componentsPerLayer);
+      startLayer += first;
+      header.LayerCount = last - first + 1;
+    }
+  }
   return {
     StartLayer: startLayer,
     Key: key,
@@ -101,7 +124,8 @@ function readLegacyPadstackHeader(
   const drillMarkShape = reader.u8();
   const flags = reader.u8();
   const drillChars = reader.u8();
-  reader.skip(3);
+  reader.skip(1);
+  const legacyLayerFlags = reader.u16();
   const arrayNX = reader.u16();
   const arrayNY = reader.u16();
   const layerCount = reader.u16();
@@ -125,6 +149,9 @@ function readLegacyPadstackHeader(
     ClearanceY: clearanceY,
     SlotX: slotX,
     SlotY: slotY,
+    ...(formatVersion < 160
+      ? { RestrictedLayerSpan: (legacyLayerFlags & 1) !== 0 }
+      : {}),
   };
 }
 
@@ -218,11 +245,17 @@ export function readPadstackDimensions(
   reader.skip(3);
   const key = reader.u32();
   const next = reader.u32();
-  reader.skip(14);
+  reader.skip(formatVersion < 160 ? 46 : 14);
   const dimensionCount = reader.u16();
   const dimensionBytes =
-    formatVersion >= 175 ? 384 : formatVersion >= 162 ? 280 : 240;
-  const trailerBytes = formatVersion >= 172 ? 8 : 4;
+    formatVersion < 160
+      ? 500
+      : formatVersion >= 175
+        ? 384
+        : formatVersion >= 162
+          ? 280
+          : 240;
+  const trailerBytes = formatVersion < 160 ? 8 : formatVersion >= 172 ? 8 : 4;
   reader.skip(dimensionCount * dimensionBytes + trailerBytes);
   return { Key: key, Next: next };
 }

@@ -5,6 +5,9 @@ export class Reader {
   offset = 0;
   readonly view: DataView;
   readonly buffer: ArrayBuffer;
+  private recordFlagsOffset = -1;
+  private recordFlags = 0;
+  private floatScratch?: DataView;
   constructor(
     buffer: ArrayBuffer,
     readonly textDecoder = new BrdTextDecoder(),
@@ -36,6 +39,17 @@ export class Reader {
       throw parserError("brdInvalidOffset");
     this.offset = offset;
   }
+  /** V15 packs the six-bit record type above ten flag bits in the first word. */
+  recordType(version: number): number {
+    this.recordFlagsOffset = -1;
+    if (version >= 160) return this.u8();
+    this.ensure(2);
+    const tag = this.view.getUint16(this.offset, true);
+    this.recordFlagsOffset = this.offset + 1;
+    this.recordFlags = tag & 0x3ff;
+    this.offset++;
+    return tag >>> 10;
+  }
   private numbers(
     size: 1 | 2 | 4,
     count: number | undefined,
@@ -44,20 +58,23 @@ export class Reader {
     if (count !== undefined && (!Number.isSafeInteger(count) || count < 0))
       throw parserError("brdInvalidArrayCount", { detail: count });
     this.ensure(size * (count ?? 1));
-    const one = () => {
-      const p = this.offset;
-      this.offset += size;
-      return size === 1
-        ? this.view.getUint8(p)
-        : size === 2
-          ? signed
-            ? this.view.getInt16(p, true)
-            : this.view.getUint16(p, true)
-          : signed
-            ? this.view.getInt32(p, true)
-            : this.view.getUint32(p, true);
-    };
-    return count === undefined ? one() : Array.from({ length: count }, one);
+    if (count === undefined) return this.number(size, signed);
+    const result = new Array<number>(count);
+    for (let i = 0; i < count; i++) result[i] = this.number(size, signed);
+    return result;
+  }
+  private number(size: 1 | 2 | 4, signed: boolean): number {
+    const p = this.offset;
+    this.offset += size;
+    if (size === 1)
+      return p === this.recordFlagsOffset
+        ? this.recordFlags
+        : this.view.getUint8(p);
+    if (size === 2)
+      return signed
+        ? this.view.getInt16(p, true)
+        : this.view.getUint16(p, true);
+    return signed ? this.view.getInt32(p, true) : this.view.getUint32(p, true);
   }
   u8(): number;
   u8(count: number): number[];
@@ -87,7 +104,7 @@ export class Reader {
   float(): number {
     const high = this.u32(),
       low = this.u32();
-    const v = new DataView(new ArrayBuffer(8));
+    const v = (this.floatScratch ??= new DataView(new ArrayBuffer(8)));
     v.setUint32(0, high);
     v.setUint32(4, low);
     return v.getFloat64(0);

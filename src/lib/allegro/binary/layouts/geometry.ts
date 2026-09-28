@@ -14,13 +14,15 @@ export function readArc(reader: Reader, formatVersion: number): RawRecord {
     record.Unknown6 = reader.u32();
   }
   record.Width = reader.u32();
+  if (formatVersion < 160)
+    [record.Width, record.Unknown1] = [record.Unknown1, record.Width];
   record.StartX = reader.i32();
   record.StartY = reader.i32();
   record.EndX = reader.i32();
   record.EndY = reader.i32();
-  record.CenterX = reader.float();
-  record.CenterY = reader.float();
-  record.Radius = reader.float();
+  record.CenterX = formatVersion < 160 ? reader.i32() : reader.float();
+  record.CenterY = formatVersion < 160 ? reader.i32() : reader.float();
+  record.Radius = formatVersion < 160 ? reader.i32() : reader.float();
   record.BoundingBoxCoords = reader.i32(4);
   return record;
 }
@@ -38,7 +40,7 @@ export function readFootprintRectangle(
   record.FpPtr = reader.u32();
   record.Unknown1 = reader.u32();
   record.Unknown2 = reader.u32();
-  record.Unknown3 = reader.u32();
+  if (formatVersion >= 160) record.Unknown3 = reader.u32();
   if (formatVersion >= 172) {
     record.Unknown4 = reader.u32();
     record.Unknown5 = reader.u32();
@@ -57,7 +59,7 @@ export function readGraphic(reader: Reader, formatVersion: number): RawRecord {
   record.Key = reader.u32();
   record.Next = reader.u32();
   record.Parent = reader.u32();
-  record.Flags = reader.u32();
+  record.Flags = formatVersion < 160 ? 0 : reader.u32();
   if (formatVersion >= 172) {
     record.Unknown2 = reader.u32();
   }
@@ -79,6 +81,8 @@ export function readSegment(reader: Reader, formatVersion: number): RawRecord {
     record.Unknown2 = reader.u32();
   }
   record.Width = reader.u32();
+  if (formatVersion < 160)
+    [record.Width, record.Flags] = [record.Flags, record.Width];
   record.StartX = reader.i32();
   record.StartY = reader.i32();
   record.EndX = reader.i32();
@@ -117,7 +121,7 @@ export function readShape(reader: Reader, formatVersion: number): RawRecord {
   record.Key = reader.u32();
   record.Next = reader.u32();
   record.Ptr1 = reader.u32();
-  record.Unknown1 = reader.u32();
+  record.Unknown1 = formatVersion < 160 ? 0 : reader.u32();
   if (formatVersion >= 172) {
     record.Unknown2 = reader.u32();
     record.Unknown3 = reader.u32();
@@ -150,7 +154,7 @@ export function readKeepout(reader: Reader, formatVersion: number): RawRecord {
   if (formatVersion >= 172) {
     record.Unknown1 = reader.u32();
   }
-  record.Flags = reader.u32();
+  record.Flags = formatVersion < 160 ? 0 : reader.u32();
   record.FirstSegmentPtr = reader.u32();
   record.Ptr3 = reader.u32();
   record.Unknown2 = reader.u32();

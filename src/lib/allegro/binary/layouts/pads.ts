@@ -13,7 +13,8 @@ export function readPinNumber(
     record.Previous = reader.u32();
   }
   if (formatVersion < 172) {
-    record.StrPtr16x = reader.u32();
+    if (formatVersion < 160) record.Number = reader.str(32);
+    else record.StrPtr16x = reader.u32();
   }
   record.Next = reader.u32();
   if (formatVersion >= 172) {
@@ -37,8 +38,10 @@ export function readPinDefinition(
   record.Layer = reader.u16();
   record.Key = reader.u32();
   record.Next = reader.u32();
-  record.Unknown1 = reader.u32();
-  record.Unknown2 = reader.u32();
+  if (formatVersion >= 160) {
+    record.Unknown1 = reader.u32();
+    record.Unknown2 = reader.u32();
+  }
   if (formatVersion < 172) {
     record.Shape = reader.u8();
     record.DrillChar = reader.u8();
@@ -69,7 +72,8 @@ export function readPad(reader: Reader, formatVersion: number): RawRecord {
   const record: RawRecord = {};
   reader.skip(3);
   record.Key = reader.u32();
-  record.NameStrId = reader.u32();
+  if (formatVersion < 160) record.Name = reader.str(32);
+  else record.NameStrId = reader.u32();
   record.Next = reader.u32();
   if (formatVersion >= 174) {
     record.Unknown1 = reader.u32();
@@ -92,7 +96,8 @@ export function readPinName(reader: Reader, formatVersion: number): RawRecord {
   record.Type = reader.u8();
   record.R = reader.u16();
   record.Key = reader.u32();
-  record.PinNameStrPtr = reader.u32();
+  if (formatVersion < 160) record.PinName = reader.str(32);
+  else record.PinNameStrPtr = reader.u32();
   record.Next = reader.u32();
   record.PinNumberPtr = reader.u32();
   record.Unknown1 = reader.u32();
@@ -134,7 +139,7 @@ export function readPlacedPad(
   record.Key = reader.u32();
   record.Next = reader.u32();
   record.NetPtr = reader.u32();
-  record.Flags = reader.u32();
+  record.Flags = formatVersion < 160 ? 0 : reader.u32();
   if (formatVersion >= 172) {
     record.Prev = reader.u32();
   }
@@ -163,7 +168,7 @@ export function readVia(reader: Reader, formatVersion: number): RawRecord {
   record.Key = reader.u32();
   record.Next = reader.u32();
   record.NetPtr = reader.u32();
-  record.Unknown2 = reader.u32();
+  if (formatVersion >= 160) record.Unknown2 = reader.u32();
   if (formatVersion >= 172) {
     record.Unknown3 = reader.u32();
   }

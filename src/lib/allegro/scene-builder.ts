@@ -336,8 +336,9 @@ export class AllegroSceneBuilder {
             : undefined;
         Object.assign(placed, placement);
         placed.finger = {
-          reference: db.strings.get(component?.RefDesStrPtr) ?? "",
-          name: db.strings.get(pinPad?.NameStrId) ?? "",
+          reference:
+            component?.RefDes ?? db.strings.get(component?.RefDesStrPtr) ?? "",
+          name: pinPad?.Name ?? db.strings.get(pinPad?.NameStrId) ?? "",
           ...(pinPad ? { sourcePin: sourcePin!.Key } : {}),
         };
         placed.pads = pads.map((p) => ({
@@ -377,7 +378,8 @@ export class AllegroSceneBuilder {
     buildProgress.begin("构建器件焊盘");
     for (const fp of db.records(0x2d)) {
       const component = db.get(fp.InstRef),
-        reference = db.strings.get(component?.RefDesStrPtr) ?? "";
+        reference =
+          component?.RefDes ?? db.strings.get(component?.RefDesStrPtr) ?? "";
       const origin = point(fp.CoordX, fp.CoordY),
         angle = (fp.Rotation * Math.PI) / 180000,
         back = fp.Layer !== 0;
@@ -444,7 +446,7 @@ export class AllegroSceneBuilder {
         const pin: Pin = {
           id: placed.Key,
           net: assignment?.Net ?? assignments.get(placed.Key) ?? 0,
-          name: db.strings.get(pad.NameStrId) ?? "",
+          name: pad.Name ?? db.strings.get(pad.NameStrId) ?? "",
           reference,
           at,
           angle: angle + (back ? Math.PI - localAngle : localAngle),

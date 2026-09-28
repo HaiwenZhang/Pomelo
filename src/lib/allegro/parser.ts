@@ -40,7 +40,7 @@ export class AllegroParser {
         throw parserError("brdUnalignedRecord", {
           detail: `0x${offset.toString(16)}`,
         });
-      const type = r.u8();
+      const type = r.recordType(header.version);
       if (type === 0) {
         // V18 permits zero-filled gaps between record groups. Only resume at
         // an aligned nonzero type; never scan past unknown/nonzero payloads.

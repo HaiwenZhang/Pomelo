@@ -9,18 +9,25 @@ export class BrdDatabase {
   readonly byType = new Map<number, number[]>();
   count = 0;
   endOffset = 0;
+  private readonly reader: Reader;
+  private readonly decoder: AllegroRecordReader;
   constructor(
     readonly buffer: ArrayBuffer,
     readonly header: BrdHeader,
     readonly strings: Map<number, string>,
     readonly textDecoder = new BrdTextDecoder(),
-  ) {}
+  ) {
+    this.reader = new Reader(buffer, textDecoder);
+    this.decoder = new AllegroRecordReader(this.reader, header);
+  }
   at(offset: number) {
-    const reader = new Reader(this.buffer, this.textDecoder);
+    // Decoding is synchronous; iterators yield only after a complete record.
+    // Reuse cursor machinery, while returning fresh independently owned values.
+    const reader = this.reader;
     reader.seek(offset);
-    const type = reader.u8();
+    const type = reader.recordType(this.header.version);
     return {
-      ...new AllegroRecordReader(reader, this.header).read(type),
+      ...this.decoder.read(type),
       type,
       offset,
     } as Raw;

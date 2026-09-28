@@ -27,11 +27,13 @@ export function readTrack(reader: Reader, formatVersion: number): RawRecord {
   record.Next = reader.u32();
   record.NetAssignment = reader.u32();
   record.UnknownPtr1 = reader.u32();
-  record.Unknown2 = reader.u32();
-  record.Unknown3 = reader.u32();
+  if (formatVersion >= 160) {
+    record.Unknown2 = reader.u32();
+    record.Unknown3 = reader.u32();
+  }
   record.UnknownPtr2a = reader.u32();
   record.UnknownPtr2b = reader.u32();
-  record.Unknown4 = reader.u32();
+  if (formatVersion >= 160) record.Unknown4 = reader.u32();
   record.UnknownPtr3a = reader.u32();
   record.UnknownPtr3b = reader.u32();
   if (formatVersion >= 172) {
@@ -56,8 +58,10 @@ export function readFillLink(reader: Reader, formatVersion: number): RawRecord {
   record.UnknownPtr1 = reader.u32();
   record.UnknownPtr2 = reader.u32();
   record.Unknown2 = reader.u32();
-  record.UnknownPtr3 = reader.u32();
-  record.UnknownPtr4 = reader.u32();
+  if (formatVersion >= 160) {
+    record.UnknownPtr3 = reader.u32();
+    record.UnknownPtr4 = reader.u32();
+  }
   if (formatVersion >= 174) {
     record.Unknown3 = reader.u32();
   }
@@ -71,7 +75,7 @@ export function readNet(reader: Reader, formatVersion: number): RawRecord {
   record.Key = reader.u32();
   record.Next = reader.u32();
   record.NetName = reader.u32();
-  record.Unknown1 = reader.u32();
+  if (formatVersion >= 160) record.Unknown1 = reader.u32();
   if (formatVersion >= 172) {
     record.Unknown2 = reader.u32();
   }
@@ -94,7 +98,7 @@ export function readRatline(reader: Reader, formatVersion: number): RawRecord {
   record.Layer = reader.u16();
   record.Key = reader.u32();
   record.Next = reader.u32();
-  record.Flags = reader.u32(2);
+  record.Flags = reader.u32(formatVersion < 160 ? 1 : 2);
   record.Ptr1 = reader.u32();
   record.Ptr2 = reader.u32();
   record.Ptr3 = reader.u32();

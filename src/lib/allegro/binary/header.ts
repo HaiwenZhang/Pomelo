@@ -26,6 +26,9 @@ export interface BrdHeader {
 }
 
 const FORMAT_VERSION_BY_MAGIC = new Map([
+  // Verified with native 15.2/15.5 (1205) and 15.7 (120f) cases.
+  [0x120500, 152],
+  [0x120f00, 157],
   [0x130000, 160],
   [0x130400, 162],
   [0x130c00, 164],
@@ -97,7 +100,7 @@ const V251_HEADER_LAYOUT: HeaderLayout = {
 
 const OBJECT_COUNT_OFFSET = 0x14;
 const WRITER_VERSION_BYTES = 60;
-// The layer map stays at the same position across all supported header layouts.
+// V16 and later share this position; V15 keeps the map at 0x470.
 const LAYER_MAP_OFFSET = 0x428;
 const LAYER_MAP_ENTRY_COUNT = 25;
 const V18_LISTS_OFFSET = 0x3c;
@@ -143,7 +146,7 @@ export class AllegroHeaderReader {
       divisor,
       stringCount,
       constraintEnd,
-      layerMap: readLayerMap(reader),
+      layerMap: readLayerMap(reader, formatVersion),
       textList,
       graphicList,
       sentinelKeys,
@@ -200,8 +203,11 @@ function readListSentinels(reader: Reader, formatVersion: number): number[] {
   return [...sentinelKeys];
 }
 
-function readLayerMap(reader: Reader): BrdHeader["layerMap"] {
-  reader.seek(LAYER_MAP_OFFSET);
+function readLayerMap(
+  reader: Reader,
+  formatVersion: number,
+): BrdHeader["layerMap"] {
+  reader.seek(formatVersion < 160 ? 0x470 : LAYER_MAP_OFFSET);
   return Array.from({ length: LAYER_MAP_ENTRY_COUNT }, () => ({
     classId: reader.u32(),
     recordId: reader.u32(),

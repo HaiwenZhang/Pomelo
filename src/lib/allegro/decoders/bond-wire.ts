@@ -132,8 +132,9 @@ export class AllegroBondWireResolver {
         material,
         sourcePin: pin.Key,
         finger: finger.Key,
-        reference: strings.get(component?.RefDesStrPtr) ?? "",
-        pinName: strings.get(pad.NameStrId) ?? "",
+        reference:
+          component?.RefDes ?? strings.get(component?.RefDesStrPtr) ?? "",
+        pinName: pad.Name ?? strings.get(pad.NameStrId) ?? "",
       },
     };
   }
