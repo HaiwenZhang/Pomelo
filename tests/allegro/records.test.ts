@@ -84,10 +84,12 @@ test("17.5 definition slots consume their extra word", () => {
 test("malformed blob and unknown records fail rather than scanning ahead", () => {
   const { r, v } = record(12, 0x21);
   v.setUint32(4, 8, true);
-  expect(() => new AllegroRecordReader(r, header).read(0x21)).toThrow(/长度/);
+  expect(() => new AllegroRecordReader(r, header).read(0x21)).toThrow(
+    /blob length/,
+  );
   expect(() =>
     new AllegroRecordReader(new Reader(new ArrayBuffer(16)), header).read(0xff),
-  ).toThrow(/未知记录/);
+  ).toThrow(/Unknown BRD record/);
 });
 
 for (const version of [160, 162, 164, 166, 172, 174])

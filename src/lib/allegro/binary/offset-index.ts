@@ -80,9 +80,9 @@ export class OffsetIndex {
     byteOffset: number,
     duplicatePolicy: DuplicatePolicy,
   ): boolean {
-    if (!isValidRecordId(recordId)) throw new Error("Invalid uint32 record ID");
+    if (!isValidRecordId(recordId)) throw parserError("brdInvalidRecordId");
     if (!Number.isSafeInteger(byteOffset) || byteOffset < 0)
-      throw new Error("Invalid record offset");
+      throw parserError("brdInvalidRecordOffset");
     if (recordId === 0)
       return this.insertZeroRecord(byteOffset, duplicatePolicy);
 
@@ -197,3 +197,4 @@ function storeByteOffset(
   }
   bucket.byteOffsets[slotIndex] = byteOffset;
 }
+import { parserError } from "../../parser-error";

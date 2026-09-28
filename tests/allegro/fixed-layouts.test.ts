@@ -136,7 +136,7 @@ test("pointer arrays consume all 100 slots even when only one entry is used", ()
     truncated.skip(1);
     expect(() =>
       new AllegroFixedLayoutReader(truncated, version).read(0x37),
-    ).toThrow(/越界/);
+    ).toThrow(/exceeds the file/);
   }
 });
 

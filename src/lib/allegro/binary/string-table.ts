@@ -1,5 +1,6 @@
 import type { BrdHeader } from "./header";
 import { Reader } from "./reader";
+import { parserError } from "../../parser-error";
 import { BrdTextDecoder } from "./text-decoder";
 export class AllegroStringTableReader {
   constructor(
@@ -18,7 +19,8 @@ export class AllegroStringTableReader {
     for (let i = 0; i < header.stringCount; i++) {
       signal?.throwIfAborted();
       const id = r.u32();
-      if (strings.has(id)) throw new Error(`重复 BRD 字符串 ID ${id}`);
+      if (strings.has(id))
+        throw parserError("brdDuplicateStringId", { detail: id });
       strings.set(id, r.cstring());
       if (performance.now() >= deadline) {
         progress?.(i / header.stringCount);

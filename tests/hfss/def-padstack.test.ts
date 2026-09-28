@@ -53,23 +53,23 @@ test("DEF rejects active hole overrides and unknown instance extensions instead 
   const read = () => defPadInstance(object(19, fields), bindings);
   expect(read().pin).toBe(true); // A disabled stored override must not affect geometry.
   fields[9] = 1;
-  expect(read).toThrow(/孔径覆盖/);
+  expect(read).toThrow(/drill overrides/);
   fields[9] = 0;
   for (const index of [8, 11, 12]) {
     const previous = fields[index];
     fields[index] = index === 11 ? [1] : "unknown";
-    expect(read).toThrow(/扩展字段/);
+    expect(read).toThrow(/extension fields/);
     fields[index] = previous;
   }
   fields[10] = 2;
-  expect(read).toThrow(/Pin 标志/);
+  expect(read).toThrow(/Pin flag/);
 });
 test("DEF physical units and independent pad rotation preserve dimensions and offsets", () => {
   expect(defQuantity("10mil", "length")).toBe(0.000254);
   expect(defQuantity("180deg", "angle")).toBe(Math.PI);
   expect(defQuantity("1e-3m", "length")).toBe(0.001);
-  expect(() => defQuantity("1mm + width", "length")).toThrow(/表达式/);
-  expect(() => defQuantity("2GHz", "length")).toThrow(/单位/);
+  expect(() => defQuantity("1mm + width", "length")).toThrow(/expression/);
+  expect(() => defQuantity("2GHz", "length")).toThrow(/unit/);
   const call = (s: string) => parseDefStatement(s).value as DefCall;
   const pad = defStandardPad(
     call("pad(shp='Rct',Szs('4mm','2mm'),X='1mm',Y='-2mm',R='90deg')"),
@@ -97,7 +97,7 @@ test("DEF physical units and independent pad rotation preserve dimensions and of
       call("pad(shp='Rct',Szs('4mm'),X='0mm',Y='0mm',R='0deg')"),
       1,
     ),
-  ).toThrow(/尺寸/);
+  ).toThrow(/dimensions/);
 });
 
 test("Python oval slot hole retains its full envelope and rotation", () => {
@@ -176,14 +176,14 @@ test("DEF text polygon arc sentinels reproduce the native panda slot contour", (
   const nonSlot = parseDefStatement(
     "hle(shp='Ply',Szs(),ply(cl=true,pt(U='mm',x=0,y=0,x=1,y=0,x=1,y=1,x=0,y=1)),X='0mm',Y='0mm',R='0deg')",
   ).value as DefCall;
-  expect(() => defDrill(nonSlot)).toThrow(/直槽孔/);
+  expect(() => defDrill(nonSlot)).toThrow(/straight slot/);
 });
 
 test("DEF Padstack usage preserves disabled regular pads instead of drawing every definition layer", () => {
   expect([...defUsedPadLayers("2:1:6:1:10:2:24:3:")]).toStrictEqual([2, 6, 24]);
   expect([...defUsedPadLayers("2:0:24:1:")]).toStrictEqual([24]);
   expect(defUsedPadLayers("").size).toBe(0);
-  expect(() => defUsedPadLayers("2:2:2:1:")).toThrow(/使用层/);
-  expect(() => defUsedPadLayers("2:7:")).toThrow(/使用表/);
-  expect(() => defUsedPadLayers("2:1")).toThrow(/使用表/);
+  expect(() => defUsedPadLayers("2:2:2:1:")).toThrow(/usage layer/);
+  expect(() => defUsedPadLayers("2:7:")).toThrow(/usage table/);
+  expect(() => defUsedPadLayers("2:1")).toThrow(/usage table/);
 });

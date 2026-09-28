@@ -1,6 +1,7 @@
 import type { BoardText } from "../../board/model";
 import type { FontDefinition } from "../binary/records/definitions";
 import { isUint32 } from "../binary/record-values";
+import { parserError } from "../../parser-error";
 type TextWrapperFields = {
   Key?: unknown;
   Layer?: unknown;
@@ -40,7 +41,7 @@ export class AllegroTextRecordDecoder {
       !isUint32(props) ||
       typeof graphic.Value !== "string"
     )
-      throw new Error(`Allegro 文字记录字段无效 ${id}`);
+      throw parserError("brdInvalidTextRecord", { detail: String(id) });
     const fontIndex = props & 255,
       alignment = (props >>> 16) & 255,
       reversal = props >>> 24;

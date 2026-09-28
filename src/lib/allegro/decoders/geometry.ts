@@ -4,6 +4,7 @@ import { ArcShape } from "../../board/shapes/arc";
 import { PathShape } from "../../board/shapes/path";
 import type { BrdDatabase } from "../database";
 import { cooperative } from "../../cooperative";
+import { parserError } from "../../parser-error";
 export class AllegroGeometryDecoder {
   constructor(
     readonly database: BrdDatabase,
@@ -24,7 +25,7 @@ export class AllegroGeometryDecoder {
     while (key) {
       if (seen.has(key)) {
         if (key === first) break;
-        throw new Error(`路径链循环 ${key}`);
+        throw parserError("brdPathChainLoop", { detail: key });
       }
       seen.add(key);
       const r = db.get(key);
@@ -90,7 +91,7 @@ export class AllegroGeometryDecoder {
     while (key) {
       const hole = db.get(key);
       if (hole?.type !== 52) break;
-      if (seen.has(key)) throw new Error(`铜皮孔洞链循环 ${key}`);
+      if (seen.has(key)) throw parserError("brdHoleChainLoop", { detail: key });
       seen.add(key);
       const path = yield* this.readPathSteps(hole.FirstSegmentPtr);
       if (path.length) yield path;

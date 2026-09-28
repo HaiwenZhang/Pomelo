@@ -1,3 +1,5 @@
+import { parserError } from "../../parser-error";
+
 export interface DefCall {
   name: string;
   args: {
@@ -22,9 +24,9 @@ export class DefStatementReader {
     const { text } = this;
     let at = 0;
     const error = (): never => {
-      throw new Error(
-        `HFSS 属性语法无效：${text.slice(Math.max(0, at - 24), at + 64)}`,
-      );
+      throw parserError("hfssInvalidPropertySyntax", {
+        detail: text.slice(Math.max(0, at - 24), at + 64),
+      });
     };
     const whitespace = () => {
       while (at < text.length && /\s/.test(text[at])) at++;
@@ -133,9 +135,10 @@ export class DefTextReader {
       if (directive) {
         const name = new DefStatementReader(directive[2]).read().value;
         if (typeof name !== "string")
-          throw new Error(`HFSS 块名称无效，第 ${lineNumber} 行`);
+          throw parserError("hfssInvalidBlockName", { detail: lineNumber });
         if (directive[1] === "begin") {
-          if (stack.length > 64) throw new Error("HFSS 属性块嵌套过深");
+          if (stack.length > 64)
+            throw parserError("hfssPropertyNestingTooDeep");
           const block: DefBlock = {
             name,
             properties: new Map(),
@@ -145,7 +148,9 @@ export class DefTextReader {
           stack.at(-1)!.children.push(block);
           stack.push(block);
         } else if (stack.length === 1 || stack.pop()!.name !== name)
-          throw new Error(`HFSS 属性块闭合不匹配，第 ${lineNumber} 行`);
+          throw parserError("hfssMismatchedPropertyBlock", {
+            detail: lineNumber,
+          });
         continue;
       }
       const current = stack.at(-1)!,
@@ -158,17 +163,20 @@ export class DefTextReader {
           typeof statement.value !== "object" ||
           statement.value.args.length !== Number(counted[2])
         )
-          throw new Error(`HFSS ${counted[1]} 数量不符，第 ${lineNumber} 行`);
+          throw parserError("hfssCountMismatch", {
+            detail: counted[1],
+            value: lineNumber,
+          });
       }
       if (statement.key !== undefined) {
         if (current.properties.has(statement.key))
-          throw new Error(`HFSS 重复属性 ${statement.key}`);
+          throw parserError("hfssDuplicateProperty", { detail: statement.key });
         current.properties.set(statement.key, statement.value);
       } else if (typeof statement.value === "object")
         current.calls.push(statement.value);
-      else throw new Error(`HFSS 未识别属性行 ${lineNumber}`);
+      else throw parserError("hfssUnknownPropertyLine", { detail: lineNumber });
     }
-    if (stack.length !== 1) throw new Error("HFSS 属性块截断");
+    if (stack.length !== 1) throw parserError("hfssTruncatedPropertyBlock");
     return container.children.length === 1 &&
       !container.calls.length &&
       !container.properties.size
@@ -194,13 +202,13 @@ function* statements(text: string) {
     } else if (ch === "'") quote = true;
     else if (ch === "(") depth++;
     else if (ch === ")") {
-      if (--depth < 0) throw new Error("HFSS 属性括号不匹配");
+      if (--depth < 0) throw parserError("hfssUnbalancedPropertyParentheses");
     } else if (ch === "\n" && depth === 0) {
       yield text.slice(start, i).trim();
       start = i + 1;
     }
   }
-  if (quote || depth) throw new Error("HFSS 属性文本截断");
+  if (quote || depth) throw parserError("hfssTruncatedPropertyText");
   if (start < text.length) yield text.slice(start).trim();
 }
 export function argument(call: DefCall, key: string) {

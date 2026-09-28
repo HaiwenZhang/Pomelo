@@ -1,5 +1,6 @@
 import type { BrdHeader } from "../header";
 import type { Raw as RawRecord, Reader } from "../reader";
+import { parserError } from "../../../parser-error";
 
 /** 0x1a: two linked nets with opaque metadata. */
 export function readPairedNets(
@@ -9,7 +10,7 @@ export function readPairedNets(
   // Paired-net metadata: 48 V172 and 64 V174 records in the external
   // corpus. Keep the payload intact; these words are not board geometry.
   if (formatVersion !== 172 && formatVersion !== 174) {
-    throw new Error(`尚未验证 V${formatVersion} 的 0x1a 记录布局`);
+    throw parserError("brdUnverifiedMetadataRecord", { detail: formatVersion });
   }
   const record: RawRecord = {};
   record.Type = reader.u8();
@@ -47,7 +48,7 @@ export function readBlob(reader: Reader): RawRecord {
   const record: RawRecord = {};
   reader.skip(3);
   record.Size = reader.u32();
-  if (record.Size < 12) throw new Error("无效 blob 长度");
+  if (record.Size < 12) throw parserError("brdInvalidBlobLength");
   record.Key = reader.u32();
   reader.skip(record.Size - 12);
   return record;
@@ -59,7 +60,7 @@ export function readConstraintRegion(
   { constraintEnd }: BrdHeader,
 ): RawRecord {
   const endOffset = constraintEnd - 1;
-  if (endOffset < reader.offset) throw new Error("约束块终点无效");
+  if (endOffset < reader.offset) throw parserError("brdInvalidConstraintEnd");
   reader.seek(endOffset);
   return {};
 }
@@ -74,7 +75,7 @@ export function readKeyList(
   record.Key = reader.u32();
   if (formatVersion >= 174) reader.skip(4);
   record.NumEntries = reader.u32();
-  if (record.NumEntries > 1e6) throw new Error("引用列表过大");
+  if (record.NumEntries > 1e6) throw parserError("brdReferenceListTooLarge");
   record.Entries = reader.u32(record.NumEntries);
   return record;
 }

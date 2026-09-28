@@ -1,4 +1,5 @@
 import { BrdTextDecoder } from "./text-decoder";
+import { parserError } from "../../parser-error";
 export type Raw = Record<string, any>;
 export class Reader {
   offset = 0;
@@ -17,9 +18,10 @@ export class Reader {
       bytes < 0 ||
       this.offset + bytes > this.buffer.byteLength
     )
-      throw new Error(
-        `BRD 数据越界：0x${this.offset.toString(16)}，需要 ${bytes} 字节`,
-      );
+      throw parserError("brdOutOfBounds", {
+        detail: `0x${this.offset.toString(16)}`,
+        value: bytes,
+      });
   }
   skip(bytes: number) {
     this.ensure(bytes);
@@ -31,7 +33,7 @@ export class Reader {
       offset < 0 ||
       offset > this.buffer.byteLength
     )
-      throw new Error("无效 BRD 偏移");
+      throw parserError("brdInvalidOffset");
     this.offset = offset;
   }
   private numbers(
@@ -40,7 +42,7 @@ export class Reader {
     signed = false,
   ): number | number[] {
     if (count !== undefined && (!Number.isSafeInteger(count) || count < 0))
-      throw new Error(`Invalid binary array count: ${count}`);
+      throw parserError("brdInvalidArrayCount", { detail: count });
     this.ensure(size * (count ?? 1));
     const one = () => {
       const p = this.offset;

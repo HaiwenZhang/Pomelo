@@ -331,6 +331,7 @@
     "brdUnsupportedFormat": "未対応の BRD 形式: {{detail}}",
     "brdUnknownRecord": "不明な BRD レコード種別 {{detail}}",
     "brdRecordFailed": "BRD レコード #{{detail}} (種別 {{value}}) をオフセット {{extra}} で解析できませんでした",
+    "brdUnalignedRecord": "BRD レコードが {{detail}} で整列していません",
     "brdOutOfBounds": "BRD データがファイルの範囲を超えています ({{detail}})。{{value}} バイト必要です",
     "brdMissingLayers": "BRD に基板レイヤーの定義がありません",
     "brdNoGeometry": "BRD に表示可能な配線やビアがありません",

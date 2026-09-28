@@ -5,6 +5,7 @@ import { AllegroStringTableReader } from "./binary/string-table";
 import type { BrdTextEncoding } from "./binary/text-decoder";
 import { BrdTextDecoder } from "./binary/text-decoder";
 import { BrdDatabase } from "./database";
+import { parserError, parserMessage } from "../parser-error";
 export interface ParseProgress {
   phase: "strings" | "objects";
   fraction: number;
@@ -35,7 +36,10 @@ export class AllegroParser {
     while (r.offset < buffer.byteLength) {
       signal?.throwIfAborted();
       const offset = r.offset;
-      if (offset % 4) throw new Error(`记录未对齐：0x${offset.toString(16)}`);
+      if (offset % 4)
+        throw parserError("brdUnalignedRecord", {
+          detail: `0x${offset.toString(16)}`,
+        });
       const type = r.u8();
       if (type === 0) {
         // V18 permits zero-filled gaps between record groups. Only resume at
@@ -70,7 +74,7 @@ export class AllegroParser {
       try {
         const key = records.scanKey(type);
         if (key && !db.offsets.add(key, offset))
-          throw new Error(`重复对象 ID ${key}`);
+          throw parserError("brdDuplicateObject", { detail: key });
         let group = db.byType.get(type);
         if (!group) {
           group = [];
@@ -79,8 +83,16 @@ export class AllegroParser {
         group.push(offset);
         db.count++;
       } catch (error) {
+        const context = parserMessage("brdRecordFailed", {
+          detail: db.count,
+          value: `0x${type.toString(16)}`,
+          extra: `0x${offset.toString(16)}`,
+        });
         throw new Error(
-          `记录 #${db.count}，类型 0x${type.toString(16)}，偏移 0x${offset.toString(16)}：${error instanceof Error ? error.message : String(error)}`,
+          `${context}: ${error instanceof Error ? error.message : String(error)}`,
+          {
+            cause: error,
+          },
         );
       }
       if ((db.count & 255) === 0 && performance.now() >= deadline) {

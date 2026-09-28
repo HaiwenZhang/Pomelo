@@ -80,19 +80,19 @@ test("cooperative contour reader retains malformed path and hole chain errors", 
   const { db, rows } = mixedContours();
   rows.set(13, line(13, 11, 0, 20, 0, 0));
   expect(() => new AllegroGeometryDecoder(db, 1).readShapePaths(1)).toThrow(
-    /路径链循环 11/,
+    /path chain loops at 11/,
   );
   await expect(
     new AllegroGeometryDecoder(db, 1).readContours(1),
-  ).rejects.toThrow(/路径链循环 11/);
+  ).rejects.toThrow(/path chain loops at 11/);
   rows.set(13, line(13, 10, 0, 20, 0, 0));
   rows.set(4, { type: 52, FirstSegmentPtr: 30, Next: 2 });
   expect(() => new AllegroGeometryDecoder(db, 1).readShapePaths(1)).toThrow(
-    /铜皮孔洞链循环 2/,
+    /copper hole chain loops at 2/,
   );
   await expect(
     new AllegroGeometryDecoder(db, 1).readContours(1),
-  ).rejects.toThrow(/铜皮孔洞链循环 2/);
+  ).rejects.toThrow(/copper hole chain loops at 2/);
 });
 
 for (const kind of ["long-path", "many-holes", "single-arc"] as const)

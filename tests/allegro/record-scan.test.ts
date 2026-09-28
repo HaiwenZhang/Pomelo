@@ -43,7 +43,7 @@ test("geometry index scan preserves full-reader keys and record boundaries for e
             new AllegroRecordReader(truncated, { ...header, version }).scanKey(
               type,
             ),
-          ).toThrow(/越界/);
+          ).toThrow(/exceeds the file/);
         }
       }
 });
@@ -54,11 +54,11 @@ test("index scan retains validation for variable and unknown records", () => {
   const r = new Reader(b);
   r.skip(1);
   expect(() => new AllegroRecordReader(r, header).scanKey(0x21)).toThrow(
-    /长度/,
+    /blob length/,
   );
   expect(() =>
     new AllegroRecordReader(new Reader(b), header).scanKey(0xff),
-  ).toThrow(/未知记录/);
+  ).toThrow(/Unknown BRD record/);
   const text = new ArrayBuffer(32),
     t = new DataView(text);
   t.setUint32(4, 123, true);

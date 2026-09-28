@@ -47,7 +47,7 @@ for (const version of [172, 174])
     short.skip(1);
     expect(() =>
       new AllegroRecordReader(short, { ...header, version }).read(0x1a),
-    ).toThrow(/越界/);
+    ).toThrow(/exceeds the file/);
   });
 test("unverified paired-net layouts fail explicitly", () => {
   for (const version of [160, 166, 175, 180, 181])
@@ -56,5 +56,5 @@ test("unverified paired-net layouts fail explicitly", () => {
         ...header,
         version,
       }).read(0x1a),
-    ).toThrow(/尚未验证/);
+    ).toThrow(/unverified/);
 });

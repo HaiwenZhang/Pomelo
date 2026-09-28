@@ -1,5 +1,6 @@
 import type { BrdHeader } from "../header";
 import type { Raw as RawRecord, Reader } from "../reader";
+import { parserError } from "../../../parser-error";
 
 /** 0x03: a property field whose subtype determines the payload layout. */
 export function readField(
@@ -97,7 +98,9 @@ function readFieldPayload(
         record.Value = reader.u32(record.Size / 4);
         return;
       }
-      throw new Error(`不支持的字段子类型 ${record.SubType}`);
+      throw parserError("brdUnsupportedFieldSubtype", {
+        detail: record.SubType,
+      });
   }
 }
 
@@ -105,6 +108,6 @@ function readFieldWords(reader: Reader): number[] {
   // GTX1660TI field 0x72 carries a word count followed by that many words;
   // Size is not a byte stride (the first sample says 56 for six words).
   const wordCount = reader.u32();
-  if (wordCount > 1e6) throw new Error("字段数组过大");
+  if (wordCount > 1e6) throw parserError("brdFieldArrayTooLarge");
   return reader.u32(wordCount);
 }

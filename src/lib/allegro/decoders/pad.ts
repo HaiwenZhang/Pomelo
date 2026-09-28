@@ -3,6 +3,7 @@ import { PadShape as PadGeometry } from "../../board/shapes/pad";
 import { PathShape } from "../../board/shapes/path";
 import { AllegroDrillDecoder } from "./drill";
 import type { AllegroGeometryDecoder } from "./geometry";
+import { parserError } from "../../parser-error";
 type PadComponentFields = {
   Type?: unknown;
   W?: unknown;
@@ -172,7 +173,7 @@ export class AllegroPadDecoder {
           !Number.isSafeInteger(fixedEntries))) ||
       !Array.isArray(components)
     )
-      throw new Error(`Padstack ${key} 的钻孔字段无效`);
+      throw parserError("brdInvalidDrillField", { detail: String(key) });
     let value = this.drillDefinitions.get(key);
     if (!value) {
       value = this.drillDecoder.decode({

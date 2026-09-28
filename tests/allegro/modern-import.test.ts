@@ -70,7 +70,9 @@ test("duplicate BRD string IDs fail instead of replacing an earlier name", async
   v.setUint8(0x1204, 65);
   v.setUint32(0x1208, 9, true);
   v.setUint8(0x120c, 66);
-  await expect(new AllegroParser(b).parse()).rejects.toThrow(/重复.*字符串.*9/);
+  await expect(new AllegroParser(b).parse()).rejects.toThrow(
+    /Duplicate BRD string ID 9/,
+  );
 });
 test("zero scanning stops at invalid or unaligned trailers and never skips unknown records", async () => {
   for (const [offset, type] of [
@@ -90,7 +92,7 @@ test("zero scanning stops at invalid or unaligned trailers and never skips unkno
   v.setUint8(0x1240, 0x02);
   await expect(
     Promise.resolve().then(() => new AllegroParser(b, undefined).parse()),
-  ).rejects.toThrow(/未知记录类型 0x2/);
+  ).rejects.toThrow(/Unknown BRD record type 0x2/);
 });
 test("large zero gaps yield progress and honor cancellation without publishing a database", async () => {
   let now = 0;
@@ -128,7 +130,9 @@ test("field 0x72 uses count-prefixed words rather than its Size and enforces bou
   expect(r.u32()).toBe(0xfeedcafe);
   v.setUint32(24, 8, true);
   r.seek(1);
-  expect(() => new AllegroRecordReader(r, h).read(3)).toThrow(/越界/);
+  expect(() => new AllegroRecordReader(r, h).read(3)).toThrow(
+    /exceeds the file/,
+  );
 });
 test("modern padstack and definition strides leave the next record intact", () => {
   const h = new AllegroHeaderReader(file(180).b).read(),

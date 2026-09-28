@@ -8,6 +8,7 @@ import { ArcShape } from "../../board/shapes/arc";
 import type { Raw } from "../binary/reader";
 import type { BrdDatabase } from "../database";
 import { cooperative } from "../../cooperative";
+import { parserError } from "../../parser-error";
 export const DIMENSION_LAYER = 0x10000 + 0xf901;
 export class AllegroDrawingBuilder {
   constructor(
@@ -69,7 +70,10 @@ export class AllegroDrawingBuilder {
       while (key && key !== graphic.Key) {
         if (seen.has(key)) {
           if (key === graphic.SegmentPtr) break; // Closed source path.
-          throw Error(`尺寸图形 ${graphic.Key} 路径链循环 ${key}`);
+          throw parserError("brdDrawingPathChainLoop", {
+            detail: graphic.Key,
+            value: key,
+          });
         }
         seen.add(key);
         const record = db.get(key);
@@ -132,7 +136,8 @@ export class AllegroDrawingBuilder {
       const seen = new Set<number>();
       let key = head;
       while (key && key !== tail && !db.header.sentinelKeys?.includes(key)) {
-        if (seen.has(key)) throw Error(`尺寸图形所属链循环 ${key}`);
+        if (seen.has(key))
+          throw parserError("brdDrawingOwnerChainLoop", { detail: key });
         seen.add(key);
         const graphic = db.get(key);
         if (graphic?.type !== 0x14) {

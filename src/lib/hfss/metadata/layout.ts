@@ -1,6 +1,7 @@
 import type { DefDatabase, DefObject, DefValue } from "../binary/def";
 import { argument, DefTextReader, type DefCall } from "./text";
 import { cooperative } from "../../cooperative";
+import { parserError } from "../../parser-error";
 export function defObject(
   value: DefValue | undefined,
   schema?: number,
@@ -11,22 +12,22 @@ export function defObject(
     !("schema" in value) ||
     (schema !== undefined && value.schema !== schema)
   )
-    throw new Error(
-      `HFSS 对象类型无效${schema === undefined ? "" : `，需要 ${schema}`}`,
-    );
+    throw schema === undefined
+      ? parserError("hfssInvalidObjectTypeWithoutSchema")
+      : parserError("hfssInvalidObjectSchema", { detail: schema });
   return value;
 }
 export function defArray(value: DefValue | undefined): DefValue[] {
-  if (!Array.isArray(value)) throw new Error("HFSS 对象集合无效");
+  if (!Array.isArray(value)) throw parserError("hfssInvalidObjectCollection");
   return value;
 }
 export function defInteger(value: DefValue | undefined): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value))
-    throw new Error("HFSS 对象引用无效");
+    throw parserError("hfssInvalidObjectReference");
   return value;
 }
 export function defText(value: DefValue | undefined): string {
-  if (typeof value !== "string") throw new Error("HFSS 文本字段无效");
+  if (typeof value !== "string") throw parserError("hfssInvalidTextField");
   return value;
 }
 export function defNumber(value: DefValue | undefined): number {
@@ -36,7 +37,7 @@ export function defNumber(value: DefValue | undefined): number {
     !("number" in value) ||
     !Number.isFinite(value.number)
   )
-    throw new Error("HFSS 数值字段无效");
+    throw parserError("hfssInvalidNumericField");
   return value.number;
 }
 export interface DefLayer {
@@ -67,12 +68,12 @@ export class DefLayoutReader {
       .flatMap((group) => defArray(defObject(group, 2).fields[1]))
       .map((c) => defObject(c, 3));
     if (cells.length !== 1)
-      throw new Error(`HFSS 当前需要一个板级 Cell，实际 ${cells.length} 个`);
+      throw parserError("hfssCellCount", { detail: cells.length });
     const cell = cells[0],
       metadata = new DefTextReader(defText(cell.fields[0])).read();
     const name = metadata.properties.get("dn");
     if (typeof name !== "string" || !name)
-      throw new Error("HFSS 板级 Cell 缺少名称");
+      throw parserError("hfssUnnamedBoardCell");
     const layout = defObject(cell.fields[4], 4),
       layers = new Map<number, DefLayer>();
     for (const source of new DefTextReader(defText(cell.fields[2])).read()
@@ -89,8 +90,9 @@ export class DefLayoutReader {
         typeof layerName !== "string" ||
         typeof type !== "string"
       )
-        throw new Error("HFSS 层定义无效");
-      if (layers.has(id)) throw new Error(`HFSS 重复层 ID ${id}`);
+        throw parserError("hfssInvalidLayerDefinition");
+      if (layers.has(id))
+        throw parserError("hfssDuplicateLayer", { detail: id });
       layers.set(id, {
         id,
         name: layerName,
@@ -103,7 +105,7 @@ export class DefLayoutReader {
     for (const value of defArray(layout.fields[1])) {
       const net = defObject(value, 7),
         id = defInteger(defObject(net.fields[0], 5).fields[0]);
-      if (nets.has(id)) throw new Error(`HFSS 重复网络 ID ${id}`);
+      if (nets.has(id)) throw parserError("hfssDuplicateNet", { detail: id });
       nets.set(id, defText(net.fields[1]));
     }
     const primitives = new Map<number, DefObject>(),
@@ -116,14 +118,22 @@ export class DefLayoutReader {
       }
       const primitive = defObject(value);
       if (![12, 13, 14, 15, 16].includes(primitive.schema))
-        throw new Error(`HFSS 未支持图元类型 ${primitive.schema}`);
+        throw parserError("hfssUnsupportedPrimitive", {
+          detail: primitive.schema,
+        });
       const info = defPrimitiveInfo(primitive);
       if (primitives.has(info.id))
-        throw new Error(`HFSS 重复图元 ID ${info.id}`);
+        throw parserError("hfssDuplicatePrimitive", { detail: info.id });
       if (!layers.has(info.layer))
-        throw new Error(`HFSS 图元 ${info.id} 引用缺失层 ${info.layer}`);
+        throw parserError("hfssMissingPrimitiveLayer", {
+          detail: info.id,
+          value: info.layer,
+        });
       if (info.net !== -1 && !nets.has(info.net))
-        throw new Error(`HFSS 图元 ${info.id} 引用缺失网络 ${info.net}`);
+        throw parserError("hfssMissingPrimitiveNet", {
+          detail: info.id,
+          value: info.net,
+        });
       primitives.set(info.id, primitive);
       if (info.parent !== -1) {
         const children = voids.get(info.parent);
@@ -137,13 +147,14 @@ export class DefLayoutReader {
         if (pending) await pending;
       }
       const owner = primitives.get(parent);
-      if (!owner) throw new Error(`HFSS 孔洞引用缺失父图元 ${parent}`);
+      if (!owner)
+        throw parserError("hfssMissingParentPrimitive", { detail: parent });
       const info = defPrimitiveInfo(owner);
       if (info.parent !== -1)
-        throw new Error(`HFSS 嵌套孔洞尚未验证：${parent}`);
+        throw parserError("hfssNestedVoidUnverified", { detail: parent });
       for (const child of children)
         if (defPrimitiveInfo(child).layer !== info.layer)
-          throw new Error(`HFSS 孔洞与父图元 ${parent} 不在同一层`);
+          throw parserError("hfssVoidLayerMismatch", { detail: parent });
     }
     signal?.throwIfAborted();
     return { name, cell, layout, layers, nets, primitives, voids };

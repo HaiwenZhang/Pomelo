@@ -1,4 +1,5 @@
 import { Reader } from "./reader";
+import { parserError } from "../../parser-error";
 
 type RecordList = {
   head: number;
@@ -121,7 +122,7 @@ export class AllegroHeaderReader {
     const constraintEnd = readUint32At(reader, layout.constraintEndOffset);
     const stringCount = readUint32At(reader, layout.stringCountOffset);
     const divisor = readUint32At(reader, layout.divisorOffset);
-    if (divisor === 0) throw new Error("无效 BRD 单位除数");
+    if (divisor === 0) throw parserError("brdInvalidDivisor");
 
     return {
       magic,
@@ -144,7 +145,9 @@ function resolveFormatVersion(magic: number): number {
   // The low byte identifies a revision within the same binary layout family.
   const formatVersion = FORMAT_VERSION_BY_MAGIC.get(magic & 0xffffff00);
   if (formatVersion === undefined) {
-    throw new Error(`暂不支持的 BRD 格式：0x${magic.toString(16)}`);
+    throw parserError("brdUnsupportedFormat", {
+      detail: `0x${magic.toString(16)}`,
+    });
   }
   return formatVersion;
 }

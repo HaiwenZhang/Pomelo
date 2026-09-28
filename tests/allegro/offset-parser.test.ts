@@ -31,6 +31,6 @@ test("parser retains source ordering, high unsigned IDs and key-zero records", a
 test("duplicate IDs fail at the duplicate source record instead of replacing the first location", async () => {
   const buffer = board([0, 0xffffffff, 123, 0xffffffff]);
   await expect(new AllegroParser(buffer, undefined).parse()).rejects.toThrow(
-    /记录 #3，类型 0x14，偏移 0x126c：重复对象 ID 4294967295/,
+    /BRD record #3 of type 0x14 failed at offset 0x126c: Duplicate BRD object ID 4294967295/,
   );
 });

@@ -1,6 +1,7 @@
 import type { BrdHeader } from "../header";
 import type { Reader } from "../reader";
 import { isUint32 } from "../record-values";
+import { parserError } from "../../../parser-error";
 
 const FONT_DEFINITION_CODE = 8;
 export type FontDefinition = {
@@ -107,7 +108,7 @@ function readDefinitionTableHeader(
   reader.skip(4);
   if (formatVersion >= 174) reader.skip(4);
   if (numItems > 1e6 || count > numItems) {
-    throw new Error("无效定义表容量");
+    throw parserError("brdInvalidDefinitionCapacity");
   }
   return {
     Code: code,
@@ -138,7 +139,10 @@ function getDefinitionEntryStride(
     18: 1052,
   };
   const entryStride = entryBytesByCode[definitionCode];
-  if (!entryStride) throw new Error(`不支持的定义表 ${definitionCode}`);
+  if (!entryStride)
+    throw parserError("brdUnsupportedDefinitionTable", {
+      detail: definitionCode,
+    });
   return entryStride;
 }
 

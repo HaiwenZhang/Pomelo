@@ -43,21 +43,21 @@ test("DEF declared field types retain numeric bits, cached expressions, UTF-8 an
 
 test("DEF bounds, root framing, unsupported versions/encodings and invalid text fail explicitly", async () => {
   const good = fixture([4], [string("x")]);
-  await expect(readDef(good.slice(0, -1))).rejects.toThrow(/截断/);
+  await expect(readDef(good.slice(0, -1))).rejects.toThrow(/truncated/);
   const extra = new Uint8Array(good.byteLength + 4);
   extra.set(new Uint8Array(good));
-  await expect(readDef(extra.buffer)).rejects.toThrow(/长度/);
-  await expect(readDef(fixture([], [], "99.1"))).rejects.toThrow(/版本/);
-  await expect(readDef(fixture([8], []))).rejects.toThrow(/值类型 8/);
+  await expect(readDef(extra.buffer)).rejects.toThrow(/length/);
+  await expect(readDef(fixture([], [], "99.1"))).rejects.toThrow(/version/);
+  await expect(readDef(fixture([8], []))).rejects.toThrow(/value type 8/);
   await expect(readDef(fixture([4], [u32(0x7fffffff)]))).rejects.toThrow(
-    /截断/,
+    /truncated/,
   );
   await expect(
     readDef(fixture([4], [u32(2), Buffer.from([0xc0, 0xff])])),
   ).rejects.toThrow(/UTF-8/);
   await expect(
     readDef(fixture([6], [u32(1), u32(0xffffffff)])),
-  ).rejects.toThrow(/数组/);
+  ).rejects.toThrow(/array/);
   expect(
     (await readDef(fixture([6], [u32(0), u32(0xffffffff)]))).root.fields,
   ).toStrictEqual([[]]);

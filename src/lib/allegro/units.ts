@@ -1,3 +1,5 @@
+import { parserError } from "../parser-error";
+
 export class AllegroUnits {
   static toMillimeters(units: number, divisor: number) {
     const bases: Record<number, number> = {
@@ -7,7 +9,7 @@ export class AllegroUnits {
       4: 10,
       5: 0.001,
     };
-    if (!bases[units] || !divisor) throw new Error("不支持的板坐标单位");
+    if (!bases[units] || !divisor) throw parserError("brdUnsupportedUnits");
     return bases[units] / divisor;
   }
 }

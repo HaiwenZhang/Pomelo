@@ -154,15 +154,15 @@ test("headers reject zero divisors, unsupported families and every truncated pre
     for (let length = 0; length < buffer.byteLength; length++) {
       expect(() =>
         new AllegroHeaderReader(buffer.slice(0, length)).read(),
-      ).toThrow(/越界|偏移/);
+      ).toThrow(/exceeds the file|offset/);
     }
     view.setUint32(sample.divisor, 0, true);
     expect(() => new AllegroHeaderReader(buffer).read()).toThrow(
-      /无效 BRD 单位除数/,
+      /Invalid BRD unit divisor/,
     );
     view.setUint32(0, 0x141302, true);
     expect(() => new AllegroHeaderReader(buffer).read()).toThrow(
-      /暂不支持的 BRD 格式/,
+      /Unsupported BRD format/,
     );
   }
 });

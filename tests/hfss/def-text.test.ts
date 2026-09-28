@@ -24,8 +24,8 @@ test("embedded metadata preserves quoted multiline properties and nested named/p
   expect((pad.args[1].value as DefCall).args).toStrictEqual([
     { value: "10mil" },
   ]);
-  expect(() => parseDefText("$begin 'x'\n$end 'y'")).toThrow(/闭合/);
-  expect(() => parseDefText("x='unfinished")).toThrow(/截断/);
+  expect(() => parseDefText("$begin 'x'\n$end 'y'")).toThrow(/closing/);
+  expect(() => parseDefText("x='unfinished")).toThrow(/truncated/);
 });
 
 test("Python multizone layer metadata retains its declared region names", () => {
@@ -34,5 +34,5 @@ test("Python multizone layer metadata retains its declared region names", () => 
   expect(parsed.calls).toStrictEqual([
     { name: "Zones", args: [{ value: "PRIMARY" }, { value: "FLEX" }] },
   ]);
-  expect(() => parseDefText("Zones[2: 'PRIMARY']")).toThrow(/数量/);
+  expect(() => parseDefText("Zones[2: 'PRIMARY']")).toThrow(/count/);
 });

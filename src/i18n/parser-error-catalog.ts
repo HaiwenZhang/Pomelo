@@ -522,6 +522,36 @@ const dynamicMessages = {
     "网络连接链循环：{{detail}}",
     "BRD net connection chain loops at {{detail}}",
   ],
+  brdDuplicateStringId: [
+    "重复 BRD 字符串 ID {{detail}}",
+    "Duplicate BRD string ID {{detail}}",
+  ],
+  brdHatchLineLoop: [
+    "网格铺铜 {{detail}} 的线条链循环 {{value}}",
+    "BRD hatched copper {{detail}} has a line chain loop at {{value}}",
+  ],
+  brdHatchLineMissing: [
+    "网格铺铜 {{detail}} 缺失线条 {{value}}",
+    "BRD hatched copper {{detail}} is missing line {{value}}",
+  ],
+  brdHatchHoleLoop: [
+    "网格铺铜 {{detail}} 的孔洞链循环 {{value}}",
+    "BRD hatched copper {{detail}} has a hole chain loop at {{value}}",
+  ],
+  brdHatchHoleMissing: [
+    "网格铺铜 {{detail}} 缺失孔洞 {{value}}",
+    "BRD hatched copper {{detail}} is missing hole {{value}}",
+  ],
+  brdCopperRectangleLayerMissing: [
+    "铜矩形 {{detail}} 的层 {{value}} 未定义",
+    "BRD copper rectangle {{detail}} refers to undefined layer {{value}}",
+  ],
+  brdInvalidArrayCount: [
+    "二进制数组数量无效：{{detail}}",
+    "Invalid binary array count: {{detail}}",
+  ],
+  brdInvalidRecordId: ["记录 ID 不是有效 uint32", "Invalid uint32 record ID"],
+  brdInvalidRecordOffset: ["记录偏移无效", "Invalid record offset"],
   brdNetConnectionMissing: [
     "网络连接缺失：{{detail}}",
     "BRD net connection {{detail}} is missing",
@@ -701,6 +731,30 @@ const dynamicMessages = {
   hfssDuplicatePrimitive: [
     "HFSS 重复图元 ID {{detail}}",
     "Duplicate HFSS primitive ID {{detail}}",
+  ],
+  hfssInvalidBondWireLayer: [
+    "HFSS 键合线 {{detail}} 的层类型无效",
+    "HFSS bond wire {{detail}} has an invalid layer type",
+  ],
+  hfssInvalidBondWireGeometry: [
+    "HFSS 键合线 {{detail}} 的几何无效",
+    "HFSS bond wire {{detail}} has invalid geometry",
+  ],
+  hfssCountMismatch: [
+    "HFSS {{detail}} 数量不符，第 {{value}} 行",
+    "HFSS {{detail}} count does not match at line {{value}}",
+  ],
+  hfssInvalidPolygonHole: [
+    "HFSS 多边形孔洞类型无效",
+    "Invalid HFSS polygon hole type",
+  ],
+  hfssInvalidObjectSchema: [
+    "HFSS 对象类型无效，需要 {{detail}}",
+    "Invalid HFSS object type; expected schema {{detail}}",
+  ],
+  hfssInvalidOvalSlotRadius: [
+    "HFSS 槽孔圆角半径无效",
+    "Invalid HFSS oval slot corner radius",
   ],
   hfssUnsupportedPrimitive: [
     "HFSS 未支持图元类型 {{detail}}",

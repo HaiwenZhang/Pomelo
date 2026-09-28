@@ -72,5 +72,5 @@ test("truncated binary attachments fail rather than dropping missing bytes", () 
   reader.u8();
   expect(() =>
     new AllegroRecordReader(reader, { version: 174 } as BrdHeader).read(0x3b),
-  ).toThrow(/越界/);
+  ).toThrow(/exceeds the file/);
 });

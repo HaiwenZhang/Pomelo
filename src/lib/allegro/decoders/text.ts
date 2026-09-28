@@ -4,6 +4,7 @@ import { isFontDefinitionTable } from "../binary/records/definitions";
 import type { BrdDatabase } from "../database";
 import { AllegroLayerDecoder } from "./layers";
 import { AllegroTextRecordDecoder } from "./text-record";
+import { parserError } from "../../parser-error";
 export class AllegroTextBuilder {
   constructor(
     readonly database: BrdDatabase,
@@ -26,7 +27,8 @@ export class AllegroTextBuilder {
       let key = head;
       while (key && key !== tail && !db.header.sentinelKeys?.includes(key)) {
         signal?.throwIfAborted();
-        if (seen.has(key)) throw new Error(`文字链表循环 ${key}`);
+        if (seen.has(key))
+          throw parserError("brdTextChainLoop", { detail: key });
         seen.add(key);
         const record = db.get(key);
         if (!record) {

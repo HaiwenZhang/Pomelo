@@ -1,5 +1,6 @@
 import type { BrdHeader } from "../header";
 import type { Reader } from "../reader";
+import { parserError } from "../../../parser-error";
 
 export type PadstackComponent = {
   Type: number;
@@ -57,7 +58,7 @@ export function readPadstack(
       ? readLegacyPadstackHeader(reader, formatVersion)
       : readModernPadstackHeader(reader, formatVersion);
 
-  if (header.LayerCount > 256) throw new Error("Padstack 层数超过 256");
+  if (header.LayerCount > 256) throw parserError("padstackTooManyLayers");
   const fixedComponentCount =
     formatVersion < 165 ? 10 : formatVersion < 172 ? 11 : 21;
   const componentsPerLayer = formatVersion < 172 ? 3 : 4;

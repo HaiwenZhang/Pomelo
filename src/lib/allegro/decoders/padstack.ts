@@ -1,9 +1,7 @@
 import type { Raw } from "../binary/reader";
 import type { BackdrillDefinition, BackdrillSpan } from "../../board/model";
 import { isUint32Words } from "../binary/record-values";
-function isConcentricCircle(
-  value: unknown,
-): value is {
+function isConcentricCircle(value: unknown): value is {
   Type: 2;
   W: number;
   H: number;

@@ -16,6 +16,7 @@ import { SegmentShape } from "../board/shapes/segment";
 import { cooperative } from "../cooperative";
 import { PadShape as BoardPadShape } from "../board/shapes/pad";
 import { ShapeTransform } from "../board/shapes/transform";
+import { parserError } from "../parser-error";
 import { DefReader } from "./binary/def";
 import { defPolygonPath, defPrimitivePath } from "./geometry";
 import {
@@ -68,13 +69,14 @@ export async function importHfss(
     padstacks = new DefPadstackReader(db, source).read(),
     pause = cooperative(signal);
   const copper = [...source.layers.values()].filter((l) => l.type === "signal");
-  if (!copper.length) throw new Error("HFSS 没有导体层");
+  if (!copper.length) throw parserError("hfssNoCopper");
   const layerIds = new Map(copper.map((l, i) => [l.id, i]));
   const netIds = new Map([...source.nets.keys()].map((id, i) => [id, i + 1]));
   const netId = (id: number) => {
     if (id === -1) return 0;
     const mapped = netIds.get(id);
-    if (mapped === undefined) throw new Error(`HFSS 缺失网络 ${id}`);
+    if (mapped === undefined)
+      throw parserError("hfssMissingNet", { detail: id });
     return mapped;
   };
   const scene: BoardScene = {
@@ -114,7 +116,7 @@ export async function importHfss(
     const transform = new DefStatementReader(defText(group.fields[2])).read()
       .value;
     if (typeof transform !== "object" || transform.name !== "f")
-      throw new Error("HFSS 器件变换无效");
+      throw parserError("hfssInvalidTransform");
     if (
       defQuantity(argument(transform, "x"), "length") !== 0 ||
       defQuantity(argument(transform, "y"), "length") !== 0 ||
@@ -122,7 +124,7 @@ export async function importHfss(
       Number(argument(transform, "s")) !== 1 ||
       argument(transform, "m") !== false
     )
-      throw new Error("HFSS 非恒等器件变换尚待原生核验");
+      throw parserError("hfssUnsupportedTransform");
     components.set(
       defInteger(defObject(base.fields[0], 5).fields[0]),
       defText(group.fields[1]),
@@ -142,13 +144,13 @@ export async function importHfss(
       net = netId(info.net);
     if (primitive.schema === 16) {
       if (source.layers.get(info.layer)?.type !== "wirebond")
-        throw new Error(`HFSS 键合线 ${info.id} 的层类型无效`);
+        throw parserError("hfssInvalidBondWireLayer", { detail: info.id });
       const path = defObject(primitive.fields[0], 14),
         width = defNumber(path.fields[4]) * 1000,
         profile = defText(primitive.fields[1]),
         material = defText(primitive.fields[3]);
       if (width <= 0 || source.voids.has(info.id))
-        throw new Error(`HFSS 键合线 ${info.id} 的几何无效`);
+        throw parserError("hfssInvalidBondWireGeometry", { detail: info.id });
       if (!scene.specialLayers)
         scene.specialLayers = [
           {
@@ -186,7 +188,7 @@ export async function importHfss(
       primitive.schema === 14
     ) {
       const width = defNumber(primitive.fields[4]) * 1000;
-      if (width < 0) throw new Error("HFSS 板框线宽无效");
+      if (width < 0) throw parserError("hfssInvalidOutlineWidth");
       for (const segment of defPolygonPath(
         defObject(primitive.fields[6], 36),
       )) {
@@ -223,16 +225,17 @@ export async function importHfss(
       continue;
     }
     if (layer === undefined)
-      throw new Error(
-        `HFSS 非铜图元层尚待适配：${source.layers.get(info.layer)?.name}`,
-      );
+      throw parserError("hfssUnsupportedNoncopperLayer", {
+        detail: source.layers.get(info.layer)?.name ?? "",
+      });
     if (primitive.schema === 14) {
       if ([1, 2, 3].some((i) => defInteger(primitive.fields[i]) !== 0))
-        throw new Error("HFSS 非圆端走线尚待适配");
-      if (source.voids.has(info.id)) throw new Error("HFSS 带孔走线尚待适配");
+        throw parserError("hfssNonroundTraceUnsupported");
+      if (source.voids.has(info.id))
+        throw parserError("hfssVoidedTraceUnsupported");
       const width = defNumber(primitive.fields[4]) * 1000,
         trackId = nextId++;
-      if (width < 0) throw new Error("HFSS 走线宽度无效");
+      if (width < 0) throw parserError("hfssInvalidTraceWidth");
       for (const segment of defPolygonPath(
         defObject(primitive.fields[6], 36),
       )) {
@@ -245,7 +248,8 @@ export async function importHfss(
       for (const hole of source.voids.get(info.id) ?? []) {
         paths.push(defPrimitivePath(hole));
       }
-      if (!paths[0].length) throw new Error(`HFSS 空铜区 ${info.id}`);
+      if (!paths[0].length)
+        throw parserError("hfssEmptyCopperArea", { detail: info.id });
       const id = nextId++,
         rings = paths.map((path) => new PathShape(path).flatten());
       for (const path of paths)
@@ -255,7 +259,10 @@ export async function importHfss(
         }
       const mesh = await new CopperMesh(rings).build(signal, paths);
       scene.zones.push({ id, layer, net, paths, rings: [], ...mesh });
-    } else throw new Error(`HFSS 图元 ${primitive.schema} 的场景转换尚待核验`);
+    } else
+      throw parserError("hfssUnverifiedPrimitiveConversion", {
+        detail: primitive.schema,
+      });
   }
   progress?.("构建 HFSS 焊盘与钻孔");
   const shapeCache = new Map<number, PadShape[]>();
@@ -333,7 +340,7 @@ export async function importHfss(
     });
     const reference = pad.component === -1 ? "" : components.get(pad.component);
     if (reference === undefined)
-      throw new Error(`HFSS 焊盘引用缺失器件 ${pad.component}`);
+      throw parserError("hfssPadMissingComponent", { detail: pad.component });
     const id = nextId++,
       net = netId(pad.net);
     let owner: Pin | Via;
@@ -360,7 +367,7 @@ export async function importHfss(
       const first = layerIds.get(binding.first),
         last = layerIds.get(binding.last);
       if (first === undefined || last === undefined)
-        throw new Error("HFSS 钻孔起止层不是导体");
+        throw parserError("hfssDrillEndsNotConductors");
       owner = {
         id,
         net,
@@ -395,8 +402,7 @@ export async function importHfss(
         }).bounds(owner),
       );
   }
-  if (!Number.isFinite(scene.bounds.minX))
-    throw new Error("HFSS 场景没有可显示几何");
+  if (!Number.isFinite(scene.bounds.minX)) throw parserError("hfssNoGeometry");
   signal?.throwIfAborted();
   return {
     scene,

@@ -30,5 +30,5 @@ test("0x141402 keeps its identity and reads the extended definition table stride
   expect(record.Stride).toBe(32);
   expect(r.u32()).toBe(0xfeedcafe);
   view.setUint32(0, 0x141302, true);
-  expect(() => new AllegroHeaderReader(file).read()).toThrow(/暂不支持/);
+  expect(() => new AllegroHeaderReader(file).read()).toThrow(/Unsupported/);
 });

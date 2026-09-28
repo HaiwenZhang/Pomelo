@@ -51,7 +51,7 @@ test("DEF signed sagitta reproduces native EDB arc center, radius and direction 
       end: 0,
       fields: [0, 0, [0, 0, 0.002, Number.MAX_VALUE]],
     }),
-  ).toThrow(/缺少端点/);
+  ).toThrow(/missing its endpoint/);
 });
 
 test("DEF rotated round rectangle uses its center and reproduces native fixture tangent points", () => {

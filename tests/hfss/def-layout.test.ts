@@ -69,15 +69,15 @@ test("DEF resolves independent ID namespaces, reversed layer IDs and out-of-orde
     parent: -1,
   });
   layout.fields[4] = [hole];
-  await expect(readDefLayout(db)).rejects.toThrow(/缺失父图元/);
+  await expect(readDefLayout(db)).rejects.toThrow(/missing parent primitive/);
   layout.fields[4] = [outer, primitive(8, 3, 1)];
-  await expect(readDefLayout(db)).rejects.toThrow(/不在同一层/);
+  await expect(readDefLayout(db)).rejects.toThrow(/different layers/);
   layout.fields[4] = [outer, primitive(9, -1, 99)];
-  await expect(readDefLayout(db)).rejects.toThrow(/缺失层/);
+  await expect(readDefLayout(db)).rejects.toThrow(/missing layer/);
   layout.fields[4] = [outer, primitive(9, -1, 15, 999)];
-  await expect(readDefLayout(db)).rejects.toThrow(/缺失网络/);
+  await expect(readDefLayout(db)).rejects.toThrow(/missing net/);
   layout.fields[4] = [outer, outer];
-  await expect(readDefLayout(db)).rejects.toThrow(/重复图元/);
+  await expect(readDefLayout(db)).rejects.toThrow(/Duplicate HFSS primitive/);
   const controller = new AbortController();
   controller.abort();
   await expect(readDefLayout(db, controller.signal)).rejects.toMatchObject({

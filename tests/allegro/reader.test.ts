@@ -32,7 +32,7 @@ test("strings consume their padded storage", () => {
 });
 test("unknown format fails instead of guessing record boundaries", () => {
   expect(() => new AllegroHeaderReader(new ArrayBuffer(64)).read()).toThrow(
-    /不支持/,
+    /Unsupported/,
   );
 });
 
@@ -58,6 +58,6 @@ test("string alignment uses absolute stream position", () => {
 });
 test("unterminated string fails at the input boundary", () => {
   expect(() => new Reader(Uint8Array.from([65, 66]).buffer).cstring()).toThrow(
-    /越界/,
+    /exceeds the file/,
   );
 });

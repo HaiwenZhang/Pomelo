@@ -15,6 +15,7 @@ import {
 import { readPadstack, readPadstackDimensions } from "./records/padstacks";
 import { readProperty } from "./records/properties";
 import { readSignalIntegrityModel, readTextGraphic } from "./records/text";
+import { parserError } from "../../parser-error";
 
 type VariableRecordDecoder = (reader: Reader, header: BrdHeader) => RawRecord;
 
@@ -52,7 +53,10 @@ export class AllegroRecordReader {
       this.reader,
       this.header.version,
     ).read(recordType);
-    if (!record) throw new Error(`未知记录类型 0x${recordType.toString(16)}`);
+    if (!record)
+      throw parserError("brdUnknownRecord", {
+        detail: `0x${recordType.toString(16)}`,
+      });
     if (recordType === 0x2d && this.header.version < 172)
       record.InstRef = record.InstRef16x;
     return record;

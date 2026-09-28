@@ -65,19 +65,23 @@ test("variable field and table readers reject invalid counts before consuming pa
   const field = createRecord(32);
   field.view.setUint8(16, 0x72);
   field.view.setUint32(24, 1_000_001, true);
-  expect(() => field.records.read(0x03)).toThrow(/字段数组过大/);
+  expect(() => field.records.read(0x03)).toThrow(/field array is too large/);
   expect(field.reader.offset).toBe(28);
 
   const references = createRecord(20);
   references.view.setUint32(12, 1_000_001, true);
-  expect(() => references.records.read(0x3c)).toThrow(/引用列表过大/);
+  expect(() => references.records.read(0x3c)).toThrow(
+    /reference list is too large/,
+  );
   expect(references.reader.offset).toBe(16);
 
   const definitions = createRecord(36);
   definitions.view.setUint16(2, 8, true);
   definitions.view.setUint32(16, 1, true);
   definitions.view.setUint32(20, 2, true);
-  expect(() => definitions.records.read(0x36)).toThrow(/无效定义表容量/);
+  expect(() => definitions.records.read(0x36)).toThrow(
+    /definition table capacity/,
+  );
   expect(definitions.reader.offset).toBe(36);
 });
 
@@ -87,10 +91,10 @@ test("constraint records use the declared region endpoint and reject backward or
   expect(valid.reader.offset).toBe(32);
   expect(valid.reader.u32()).toBe(0xfeedcafe);
   const backward = createRecord(32, 174, 1);
-  expect(() => backward.records.read(0x27)).toThrow(/约束块终点无效/);
+  expect(() => backward.records.read(0x27)).toThrow(/constraint block end/);
   expect(backward.reader.offset).toBe(1);
   const beyondBuffer = createRecord(32, 174, 100);
-  expect(() => beyondBuffer.records.read(0x27)).toThrow(/无效 BRD 偏移/);
+  expect(() => beyondBuffer.records.read(0x27)).toThrow(/Invalid BRD offset/);
 });
 
 test("padstack dimension arrays retain their version-specific stride and trailer", () => {

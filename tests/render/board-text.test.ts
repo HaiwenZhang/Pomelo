@@ -61,9 +61,9 @@ test("text record decoder rejects malformed raw placement and content fields", (
   const decoder = new AllegroTextRecordDecoder(1);
   expect(() =>
     decoder.decode({ ...wrapper, CoordsX: "bad" }, { Value: "A" }, metrics),
-  ).toThrow(/文字记录字段无效/);
+  ).toThrow(/Invalid Allegro text record field/);
   expect(() => decoder.decode(wrapper, { Value: 42 }, metrics)).toThrow(
-    /文字记录字段无效/,
+    /Invalid Allegro text record field/,
   );
 });
 
@@ -90,7 +90,7 @@ test("only board and placed-footprint text chains become visible objects", async
   records.get(2).Next = 1;
   await expect(
     Promise.resolve().then(() => new AllegroTextBuilder(db, 1).build([])),
-  ).rejects.toThrow(/循环/);
+  ).rejects.toThrow(/text chain loops/);
 });
 
 test("text layers distinguish copper from separately visible silk and assembly", () => {

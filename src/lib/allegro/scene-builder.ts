@@ -33,6 +33,7 @@ import { AllegroPadstackResolver } from "./decoders/padstack";
 import { AllegroTextBuilder } from "./decoders/text";
 import { AllegroUnits } from "./units";
 import { AllegroBuildProgress } from "./build-progress";
+import { parserError } from "../parser-error";
 const colors = [
   "#58b5ed",
   "#83ce94",
@@ -62,7 +63,7 @@ export class AllegroSceneBuilder {
     const geometry = new AllegroGeometryDecoder(db, scale);
     const point = (x: number, y: number): Point => [x * scale, y * scale];
     const layerList = db.get(db.header.layerMap[6]?.recordId);
-    if (!isLayerListRecord(layerList)) throw new Error("未找到板层定义");
+    if (!isLayerListRecord(layerList)) throw parserError("brdMissingLayers");
     const layers: Layer[] = layerList.Entries.map((entry, id) => {
       const properties = "Properties" in entry ? entry.Properties : undefined;
       return {
@@ -94,10 +95,12 @@ export class AllegroSceneBuilder {
       let key = assignment.ConnItem;
       const visited = new Set<number>();
       while (key && key !== assignment.Key) {
-        if (visited.has(key)) throw new Error(`网络连接链循环：${key}`);
+        if (visited.has(key))
+          throw parserError("brdNetChainLoop", { detail: key });
         visited.add(key);
         const item = db.get(key);
-        if (!item) throw new Error(`网络连接缺失：${key}`);
+        if (!item)
+          throw parserError("brdNetConnectionMissing", { detail: key });
         assignments.set(key, assignment.Net);
         key = item.Next;
         // A single MCM network can contain hundreds of thousands of objects.
@@ -188,7 +191,8 @@ export class AllegroSceneBuilder {
       let key = track.FirstSegPtr;
       const visited = new Set<number>();
       while (key && key !== track.Key) {
-        if (visited.has(key)) throw new Error(`走线 ${track.Key} 的链表循环`);
+        if (visited.has(key))
+          throw parserError("brdTraceChainLoop", { detail: track.Key });
         visited.add(key);
         const record = db.get(key);
         if (!record) {
@@ -380,7 +384,8 @@ export class AllegroSceneBuilder {
       const visited = new Set<number>();
       let key = fp.FirstPadPtr;
       while (key && key !== fp.Key) {
-        if (visited.has(key)) throw new Error(`器件焊盘链循环 ${key}`);
+        if (visited.has(key))
+          throw parserError("brdPadChainLoop", { detail: key });
         visited.add(key);
         const placed = db.get(key);
         if (placed?.type !== 50) {
@@ -509,11 +514,17 @@ export class AllegroSceneBuilder {
         const hatchSeen = new Set<number>();
         for (let key = shape.Unknown4; key && key !== shape.Key;) {
           if (hatchSeen.has(key))
-            throw new Error(`网格铺铜 ${shape.Key} 的线条链循环 ${key}`);
+            throw parserError("brdHatchLineLoop", {
+              detail: shape.Key,
+              value: key,
+            });
           hatchSeen.add(key);
           const hatch = db.get(key);
           if (hatch?.type !== 0x20)
-            throw new Error(`网格铺铜 ${shape.Key} 缺失线条 ${key}`);
+            throw parserError("brdHatchLineMissing", {
+              detail: shape.Key,
+              value: key,
+            });
           addPath(hatch.UnknownArray1[0]);
           key = hatch.Next;
           await buildProgress.checkpoint();
@@ -521,11 +532,17 @@ export class AllegroSceneBuilder {
         const holeSeen = new Set<number>();
         for (let key = shape.FirstKeepoutPtr; key;) {
           if (holeSeen.has(key))
-            throw new Error(`网格铺铜 ${shape.Key} 的孔洞链循环 ${key}`);
+            throw parserError("brdHatchHoleLoop", {
+              detail: shape.Key,
+              value: key,
+            });
           holeSeen.add(key);
           const hole = db.get(key);
           if (hole?.type !== 0x34)
-            throw new Error(`网格铺铜 ${shape.Key} 缺失孔洞 ${key}`);
+            throw parserError("brdHatchHoleMissing", {
+              detail: shape.Key,
+              value: key,
+            });
           addPath(hole.FirstSegmentPtr);
           key = hole.Next;
           await buildProgress.checkpoint();
@@ -572,7 +589,10 @@ export class AllegroSceneBuilder {
         if ((rect.Layer & 255) !== 6 || !assignments.has(rect.Key)) continue;
         const layer = rect.Layer >>> 8;
         if (!layers[layer])
-          throw new Error(`铜矩形 ${rect.Key} 的层 ${layer} 未定义`);
+          throw parserError("brdCopperRectangleLayerMissing", {
+            detail: rect.Key,
+            value: layer,
+          });
         const [x, y, u, v] = rect.Coords,
           angle = (rect.Rotation * Math.PI) / 180000,
           dx = u - x,
@@ -627,8 +647,7 @@ export class AllegroSceneBuilder {
       if (graphic.Layer === 0xf901) dimensionGraphics.push(graphic);
       if ((++graphicWork & 255) === 0) await buildProgress.checkpoint();
     }
-    if (!Number.isFinite(bounds.minX))
-      throw new Error("文件中未找到可显示的走线或过孔");
+    if (!Number.isFinite(bounds.minX)) throw parserError("brdNoGeometry");
     buildProgress.begin("构建原始文字");
     const { texts, drawingLayers } = await new AllegroTextBuilder(
       db,

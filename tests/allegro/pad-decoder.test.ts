@@ -95,7 +95,7 @@ test("pad decoder rejects malformed drill fields before caching a definition", (
       Flags: 0,
       Components: [],
     }),
-  ).toThrow(/Padstack 11 的钻孔字段无效/);
+  ).toThrow(/Padstack 11 has an invalid drill field/);
   expect(
     decoder.drill({
       Key: 11,
