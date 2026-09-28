@@ -7,9 +7,9 @@ export function readPairedNets(
   reader: Reader,
   { version: formatVersion }: BrdHeader,
 ): RawRecord {
-  // Paired-net metadata: 48 V172 and 64 V174 records in the external
-  // corpus. Keep the payload intact; these words are not board geometry.
-  if (formatVersion !== 172 && formatVersion !== 174) {
+  // Paired-net metadata: V251 converted boards retain the 92-byte V174
+  // layout (V172 uses 88 bytes). Keep the opaque member words intact.
+  if (formatVersion !== 172 && formatVersion !== 174 && formatVersion !== 251) {
     throw parserError("brdUnverifiedMetadataRecord", { detail: formatVersion });
   }
   const record: RawRecord = {};

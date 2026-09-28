@@ -130,7 +130,9 @@ function getDefinitionEntryStride(
     5: 28 + (formatVersion >= 175 ? 4 : 0),
     6: formatVersion >= 172 ? 8 : 208,
     [FONT_DEFINITION_CODE]:
-      32 + (formatVersion >= 174 ? 4 : 0) + (formatVersion >= 172 ? 32 : 0),
+      formatVersion >= 251
+        ? 64
+        : 32 + (formatVersion >= 174 ? 4 : 0) + (formatVersion >= 172 ? 32 : 0),
     11: 1016,
     12: 232,
     13: 200,
@@ -177,15 +179,17 @@ function readFontDefinition(
   reader.skip(8);
   // V174/V175 native Text Setup (ntpcb and DDR5) places spacing at
   // +16/+20, before the extra word; photo width remains at +32.
-  // Later layout families retain their existing, unverified mapping.
+  // V251 removes that extra word: spacing stays at +16/+20, photo width
+  // moves to +28, and the full entry shrinks from 68 to 64 bytes.
+  // V180/V181 retain their existing mapping.
   const hasSpacingBeforeExtraWord =
-    formatVersion === 174 || formatVersion === 175;
+    formatVersion === 174 || formatVersion === 175 || formatVersion >= 251;
   const height = reader.u32();
   const width = reader.u32();
   if (formatVersion >= 174 && !hasSpacingBeforeExtraWord) reader.skip(4);
   const characterSpace = reader.u32();
   const lineSpace = reader.u32();
-  reader.skip(hasSpacingBeforeExtraWord ? 8 : 4);
+  reader.skip(hasSpacingBeforeExtraWord && formatVersion < 251 ? 8 : 4);
   const strokeWidth = reader.u32();
   return {
     Height: height,

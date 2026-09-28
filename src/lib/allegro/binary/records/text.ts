@@ -12,6 +12,7 @@ export type SignalIntegrityModelRecord = {
   Size: number;
   String: string;
   Unknown4?: number;
+  Unknown5?: number;
 };
 export type TextGraphicRecord = {
   T: number;
@@ -41,8 +42,19 @@ export function readSignalIntegrityModel(
       : {};
   const stringPointer = reader.u32();
   const size = reader.u32();
+  // V251 moves the trailing metadata ahead of the text and adds a word.
+  // Empty models are 32 bytes too; treating the last word as a gap loses data.
+  const prefixFields =
+    formatVersion >= 251
+      ? { Unknown4: reader.u32(), Unknown5: reader.u32() }
+      : {};
   const value = reader.str(size);
-  const modernFields = formatVersion >= 172 ? { Unknown4: reader.u32() } : {};
+  const modernFields =
+    formatVersion >= 251
+      ? prefixFields
+      : formatVersion >= 172
+        ? { Unknown4: reader.u32() }
+        : {};
   return {
     Type: type,
     T2: t2,

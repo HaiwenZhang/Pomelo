@@ -16,7 +16,7 @@ const header: BrdHeader = {
   constraintEnd: 0,
   textList: { head: 0, tail: 0 },
 };
-for (const version of [172, 174])
+for (const version of [172, 174, 251])
   test(`V${version} paired-net metadata preserves both members and its successor`, () => {
     const length = version === 172 ? 88 : 92,
       b = new ArrayBuffer(length + 8),
@@ -35,7 +35,7 @@ for (const version of [172, 174])
     r.skip(1);
     const d = new AllegroRecordReader(r, { ...header, version }).read(0x1a);
     expect(d.Key).toBe(66537);
-    expect(d.Unknown).toBe(version === 174 ? 0 : undefined);
+    expect(d.Unknown).toBe(version >= 174 ? 0 : undefined);
     expect(d.Members).toStrictEqual([
       { Net: 14480, Next: 117600, Metadata: words.slice(2, 10) },
       { Net: 14518, Next: 0, Metadata: words.slice(12, 20) },

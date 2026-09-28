@@ -530,7 +530,8 @@ export class AllegroSceneBuilder {
           await buildProgress.checkpoint();
         }
         const holeSeen = new Set<number>();
-        for (let key = shape.FirstKeepoutPtr; key;) {
+        // Native V251 hatch holes can terminate at their owning shape.
+        for (let key = shape.FirstKeepoutPtr; key && key !== shape.Key;) {
           if (holeSeen.has(key))
             throw parserError("brdHatchHoleLoop", {
               detail: shape.Key,

@@ -43,6 +43,8 @@ const FORMAT_VERSION_BY_MAGIC = new Map([
   [0x141500, 175],
   [0x150000, 180],
   [0x150200, 181],
+  // Native 25.1 saves: V181-sized header with relocated, tail-first lists.
+  [0x160100, 251],
 ]);
 
 /** Absolute byte offsets from the beginning of the file. */
@@ -86,6 +88,13 @@ const V181_HEADER_LAYOUT: HeaderLayout = {
   divisorOffset: 0x28c,
 };
 
+const V251_HEADER_LAYOUT: HeaderLayout = {
+  ...V181_HEADER_LAYOUT,
+  listOrder: "tail-first",
+  textListOffset: 0xb0,
+  graphicListOffset: 0x80,
+};
+
 const OBJECT_COUNT_OFFSET = 0x14;
 const WRITER_VERSION_BYTES = 60;
 // The layer map stays at the same position across all supported header layouts.
@@ -103,7 +112,8 @@ export class AllegroHeaderReader {
     const formatVersion = resolveFormatVersion(magic);
     const layout = getHeaderLayout(formatVersion);
     const objectCount = readUint32At(reader, OBJECT_COUNT_OFFSET);
-    const sentinelKeys = formatVersion >= 180 ? readListSentinels(reader) : [];
+    const sentinelKeys =
+      formatVersion >= 180 ? readListSentinels(reader, formatVersion) : [];
     const textList = readRecordList(
       reader,
       layout.textListOffset,
@@ -153,6 +163,7 @@ function resolveFormatVersion(magic: number): number {
 }
 
 function getHeaderLayout(formatVersion: number): HeaderLayout {
+  if (formatVersion >= 251) return V251_HEADER_LAYOUT;
   if (formatVersion >= 181) return V181_HEADER_LAYOUT;
   if (formatVersion >= 180) return V180_HEADER_LAYOUT;
   return LEGACY_HEADER_LAYOUT;
@@ -176,13 +187,14 @@ function readRecordList(
     : { head: secondKey, tail: firstKey };
 }
 
-function readListSentinels(reader: Reader): number[] {
-  // V18 stores 28 consecutive head/tail pairs.
-  reader.seek(V18_LISTS_OFFSET);
+function readListSentinels(reader: Reader, formatVersion: number): number[] {
+  // V18 stores 28 head/tail pairs; V251 relocates them and reverses each pair.
+  reader.seek(formatVersion >= 251 ? 0x60 : V18_LISTS_OFFSET);
   const sentinelKeys = new Set<number>();
   for (let listIndex = 0; listIndex < V18_LIST_COUNT; listIndex++) {
-    reader.skip(4);
-    const tailKey = reader.u32();
+    const first = reader.u32();
+    const second = reader.u32();
+    const tailKey = formatVersion >= 251 ? first : second;
     if (tailKey !== 0) sentinelKeys.add(tailKey);
   }
   return [...sentinelKeys];
