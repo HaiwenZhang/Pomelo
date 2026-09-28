@@ -159,8 +159,11 @@ test("via outline, fill and drill picking respect the visible pad layer", () => 
     }),
   );
   let display = BoardDisplay.createDisplayOptions();
+  expect(display.filled).toBe(true);
   expect(index.pick([0, 0], 100, display)?.category).toBe("drill");
   display.drills = false;
+  expect(index.pick([0, 0], 100, display)?.category).toBe("via");
+  display.filled = false;
   expect(index.pick([0, 0], 100, display)).toBe(null);
   expect(index.pick([1, 0], 100, display)?.category).toBe("via");
   display.filled = true;

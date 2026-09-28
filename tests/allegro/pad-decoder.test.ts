@@ -1,8 +1,10 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 
 import { BrdDatabase } from "../../src/lib/allegro/database";
 import { AllegroGeometryDecoder } from "../../src/lib/allegro/decoders/geometry";
 import { AllegroPadDecoder } from "../../src/lib/allegro/decoders/pad";
+import type { Point, Segment } from "../../src/lib/board/model";
+import { PadShape as PadGeometry } from "../../src/lib/board/shapes/pad";
 
 const database = new BrdDatabase(
   new ArrayBuffer(0),
@@ -78,6 +80,45 @@ test("pad decoder rejects incomplete raw shape fields with a diagnostic", () => 
   );
   expect(decoder.shape({ Type: 22, W: 2, H: 2 }, 0, [0, 0], 10)).toBe(null);
   expect(diagnostics).toStrictEqual(["Padstack 10 的焊盘类型 22 缺少形状引用"]);
+});
+
+test("custom pad dimensions preserve source values and only derive missing dimensions", () => {
+  const geometry = new AllegroGeometryDecoder(database, 1);
+  const corners: Point[] = [
+    [0, 0],
+    [2, 0],
+    [2, 3],
+    [0, 3],
+  ];
+  const path: Segment[] = corners.map((a, i) => ({
+    id: i,
+    trackId: 0,
+    layer: -1,
+    net: 0,
+    width: 0,
+    a,
+    b: corners[(i + 1) % corners.length],
+  }));
+  const read = vi.spyOn(geometry, "readShapePaths").mockReturnValue([path]);
+  const bounds = vi.spyOn(PadGeometry.prototype, "bounds");
+  try {
+    const diagnostics: string[] = [];
+    const decoder = new AllegroPadDecoder(geometry, 1, diagnostics);
+    const source = { Type: 22, W: 10, H: 20, ShapePtr: 7 };
+    const stored = decoder.shape(source, 0, [3, 4], 10)!;
+    expect([stored.width, stored.height]).toStrictEqual([10, 20]);
+    expect(bounds).not.toHaveBeenCalled();
+    const inferred = decoder.shape({ ...source, W: 0, H: 0 }, 1, [3, 4], 10)!;
+    expect([inferred.width, inferred.height]).toStrictEqual([2, 3]);
+    expect(bounds).toHaveBeenCalledTimes(1);
+    expect(inferred.custom).toBe(stored.custom);
+    expect(inferred.customPaths).toBe(stored.customPaths);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(diagnostics).toStrictEqual([]);
+  } finally {
+    bounds.mockRestore();
+    read.mockRestore();
+  }
 });
 
 test("pad decoder rejects malformed drill fields before caching a definition", () => {

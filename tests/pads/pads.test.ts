@@ -180,13 +180,14 @@ test("custom pad fill/outline switch preserves holes and highlight outlines", ()
     batches
       .filter((b) => BoardDisplay.isBatchVisible(display, b))
       .map((b) => b.padMode),
-  ).toStrictEqual(["outline"]);
-  display.filled = true;
+  ).toStrictEqual(["filled"]);
+  display.filled = false;
   expect(
     batches
       .filter((b) => BoardDisplay.isBatchVisible(display, b))
       .map((b) => b.padMode),
-  ).toStrictEqual(["filled"]);
+  ).toStrictEqual(["outline"]);
+  display.filled = true;
   expect(
     batches.filter((b) => BoardDisplay.isBatchVisible(display, b, true)).length,
   ).toBe(2);

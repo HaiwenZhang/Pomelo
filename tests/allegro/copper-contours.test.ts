@@ -95,6 +95,64 @@ test("cooperative contour reader retains malformed path and hole chain errors", 
   ).rejects.toThrow(/copper hole chain loops at 2/);
 });
 
+test("known contour owners terminate paths without decoding shape and hole records again", async () => {
+  const { rows } = mixedContours();
+  const source = {
+    type: 40,
+    Key: 1,
+    FirstSegmentPtr: 10,
+    FirstKeepoutPtr: 2,
+  };
+  rows.set(1, source);
+  rows.set(13, line(13, 1, 0, 20, 0, 0));
+  rows.set(2, { type: 52, FirstSegmentPtr: 20, Next: 1 });
+  const reads = new Map<number, number>();
+  const db = database((id) => {
+    reads.set(id, (reads.get(id) ?? 0) + 1);
+    return rows.get(id);
+  });
+  const expected = await new AllegroGeometryDecoder(db, 0.1).readContours(1);
+  expect(reads.get(1)).toBe(1);
+  expect(reads.get(2)).toBe(1);
+  expect(expected.paths).toHaveLength(2);
+  expect(expected.paths[0]).toHaveLength(4);
+  expect(expected.paths[1][0].arc!.sweep).toBe(-2 * Math.PI);
+
+  reads.clear();
+  const actual = await new AllegroGeometryDecoder(db, 0.1).readContours(source);
+  expect(actual).toStrictEqual(expected);
+  expect(reads.has(1)).toBe(false);
+  expect(reads.get(2)).toBe(1);
+
+  // A repeated edge is still an invalid cycle even in a path with a known owner.
+  rows.set(13, line(13, 11, 0, 20, 0, 0));
+  await expect(
+    new AllegroGeometryDecoder(db, 1).readContours(source),
+  ).rejects.toThrow(/path chain loops at 11/);
+});
+
+test("reusing a zero-key shape does not expose geometry absent from the record index", async () => {
+  const { rows } = mixedContours();
+  const source = {
+    type: 40,
+    Key: 0,
+    FirstSegmentPtr: 10,
+    FirstKeepoutPtr: 2,
+  };
+  const reads: number[] = [];
+  const db = database((id) => {
+    reads.push(id);
+    return rows.get(id);
+  });
+  const decoder = new AllegroGeometryDecoder(db, 0.1);
+  expect(await decoder.readContours(0)).toStrictEqual({ paths: [], rings: [] });
+  expect(await decoder.readContours(source)).toStrictEqual({
+    paths: [],
+    rings: [],
+  });
+  expect(reads).toStrictEqual([0, 0]);
+});
+
 for (const kind of ["long-path", "many-holes", "single-arc"] as const)
   test(`copper cancellation interrupts ${kind} and allows a fresh retry`, async () => {
     const count = 1_000_000;

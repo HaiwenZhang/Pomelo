@@ -8,6 +8,7 @@ export class Reader {
   private recordFlagsOffset = -1;
   private recordFlags = 0;
   private floatScratch?: DataView;
+  private byteView?: Uint8Array;
   constructor(
     buffer: ArrayBuffer,
     readonly textDecoder = new BrdTextDecoder(),
@@ -131,14 +132,22 @@ export class Reader {
   }
   cstring(): string {
     const start = this.offset;
-    while (this.u8() !== 0) {
-      /* bounded by u8 */
+    const bytes = (this.byteView ??= new Uint8Array(this.buffer));
+    let end = bytes.indexOf(0, start);
+    // Preserve u8's packed V15 flag substitution, including after a seek
+    // before that logical byte. It can introduce or hide a raw NUL byte.
+    if (this.recordFlagsOffset >= start) {
+      if (this.recordFlags === 0 && (end < 0 || this.recordFlagsOffset < end))
+        end = this.recordFlagsOffset;
+      else if (this.recordFlags !== 0 && end === this.recordFlagsOffset)
+        end = bytes.indexOf(0, end + 1);
     }
-    const length = this.offset - start;
-    const result = this.textDecoder.decode(
-      new Uint8Array(this.buffer, start, length - 1),
-      start,
-    );
+    if (end < 0) {
+      this.offset = bytes.length;
+      this.ensure(1);
+    }
+    this.offset = end + 1;
+    const result = this.textDecoder.decode(bytes.subarray(start, end), start);
     this.skip((4 - (this.offset % 4)) % 4);
     return result;
   }

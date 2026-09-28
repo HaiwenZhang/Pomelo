@@ -30,14 +30,11 @@ export class AllegroDrawingBuilder {
     const owners = new Map<number, Raw>(),
       accepted = new Set<number>(),
       groups = new Map<number, BoardDrawing>();
-    const pause = async () => {
-      const pending = checkpoint();
-      if (pending) await pending;
-    };
     for (const graphic of candidates) {
       const owner = db.get(graphic.Parent);
       if (owner?.type === 0x2d) owners.set(owner.Key, owner);
-      await pause();
+      const pause = checkpoint();
+      if (pause) await pause;
     }
     for (const text of texts)
       if (text.layer === DIMENSION_LAYER && text.ownerId !== undefined) {
@@ -129,7 +126,8 @@ export class AllegroDrawingBuilder {
         }
         drawing.segments.push(segment);
         key = record.Next;
-        await pause();
+        const pause = checkpoint();
+        if (pause) await pause;
       }
     }
     async function walk(head: number, tail: number, ownerId?: number) {
@@ -150,7 +148,8 @@ export class AllegroDrawingBuilder {
           else await append(graphic, ownerId);
         }
         key = graphic.Next;
-        await pause();
+        const pause = checkpoint();
+        if (pause) await pause;
       }
     }
     // Header membership identifies board graphics; a magic parent ID would fail
@@ -165,7 +164,8 @@ export class AllegroDrawingBuilder {
         diagnostics.push(
           `尺寸图形 ${graphic.Key} 未关联到有效板级或已放置实例链`,
         );
-      await pause();
+      const pause = checkpoint();
+      if (pause) await pause;
     }
     for (const text of texts) {
       if (
@@ -174,7 +174,8 @@ export class AllegroDrawingBuilder {
         owners.has(text.ownerId)
       )
         group(text.ownerId, text.ownerId).texts.push(text);
-      await pause();
+      const pause = checkpoint();
+      if (pause) await pause;
     }
     signal?.throwIfAborted();
     return [...groups.values()];

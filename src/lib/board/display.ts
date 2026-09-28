@@ -63,7 +63,7 @@ export class BoardDisplay {
       drills: true,
       boardText: false,
       backdrills: true,
-      filled: false,
+      filled: true,
       opacity: 1,
       shapes: 0.25,
       trackNames: true,

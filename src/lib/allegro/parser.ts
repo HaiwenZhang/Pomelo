@@ -1,6 +1,7 @@
 import { AllegroHeaderReader } from "./binary/header";
 import { Reader } from "./binary/reader";
 import { AllegroRecordReader } from "./binary/record-reader";
+import { OffsetList } from "./binary/offset-list";
 import { AllegroStringTableReader } from "./binary/string-table";
 import type { BrdTextEncoding } from "./binary/text-decoder";
 import { BrdTextDecoder } from "./binary/text-decoder";
@@ -77,7 +78,7 @@ export class AllegroParser {
           throw parserError("brdDuplicateObject", { detail: key });
         let group = db.byType.get(type);
         if (!group) {
-          group = [];
+          group = new OffsetList();
           db.byType.set(type, group);
         }
         group.push(offset);

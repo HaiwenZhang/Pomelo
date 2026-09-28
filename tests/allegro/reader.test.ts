@@ -77,3 +77,54 @@ test("unterminated string fails at the input boundary", () => {
     /exceeds the file/,
   );
 });
+
+test("C strings preserve empty values, UTF-8 diagnostics and absolute padding", () => {
+  const reader = new Reader(
+    Uint8Array.from([99, 0, 88, 88, 0xe4, 0xb8, 0xad, 0, 0xff, 0, 88, 88])
+      .buffer,
+  );
+  reader.seek(1);
+  expect(reader.cstring()).toBe("");
+  expect(reader.offset).toBe(4);
+  expect(reader.cstring()).toBe("中");
+  expect(reader.offset).toBe(8);
+  expect(reader.cstring()).toBe("\ufffd");
+  expect(reader.offset).toBe(12);
+  expect(reader.textDecoder.issues.get(8)).toEqual({
+    offset: 8,
+    length: 1,
+    encoding: "utf-8",
+  });
+});
+
+test("C strings still validate missing terminators and incomplete padding", () => {
+  const unterminated = new Reader(Uint8Array.from([65, 66]).buffer);
+  expect(() => unterminated.cstring()).toThrow(/0x2/);
+  expect(unterminated.offset).toBe(2);
+  const unpadded = new Reader(Uint8Array.from([65, 0]).buffer);
+  expect(() => unpadded.cstring()).toThrow(/0x2/);
+});
+
+test("C strings retain packed legacy flag-byte behavior", () => {
+  for (const flags of [0, 0x300]) {
+    const buffer = new ArrayBuffer(4),
+      view = new DataView(buffer);
+    view.setUint16(0, (0x07 << 10) | flags, true);
+    const reader = new Reader(buffer);
+    expect(reader.recordType(152)).toBe(0x07);
+    expect(reader.cstring()).toBe(
+      flags ? String.fromCharCode(view.getUint8(1)) : "",
+    );
+    expect(reader.offset).toBe(4);
+  }
+});
+
+test("C strings retain a packed flag substitution after seeking before its tag", () => {
+  const buffer = Uint8Array.from([65, 66, 67, 68, 1, 0, 90, 0]).buffer;
+  const reader = new Reader(buffer);
+  reader.seek(4);
+  expect(reader.recordType(152)).toBe(0);
+  reader.seek(0);
+  expect(reader.cstring()).toBe("ABCD\u0001\u0000Z");
+  expect(reader.offset).toBe(8);
+});

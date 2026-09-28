@@ -87,7 +87,10 @@ export class AllegroSceneBuilder {
     const nets = new Map<number, string>();
     for (const net of db.records(0x1b)) {
       nets.set(net.Key, db.strings.get(net.NetName) ?? "");
-      if ((++earlyWork & 255) === 0) await buildProgress.checkpoint();
+      if ((++earlyWork & 255) === 0) {
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
+      }
     }
     const assignments = new Map<number, number>();
     buildProgress.begin("解析网络连接");
@@ -105,9 +108,15 @@ export class AllegroSceneBuilder {
         key = item.Next;
         // A single MCM network can contain hundreds of thousands of objects.
         // Check inside its chain, not only between whole networks.
-        if ((++earlyWork & 255) === 0) await buildProgress.checkpoint();
+        if ((++earlyWork & 255) === 0) {
+          const pause = buildProgress.checkpoint();
+          if (pause) await pause;
+        }
       }
-      if ((++earlyWork & 255) === 0) await buildProgress.checkpoint();
+      if ((++earlyWork & 255) === 0) {
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
+      }
     }
     const segments: Segment[] = [],
       vias: Via[] = [],
@@ -180,7 +189,8 @@ export class AllegroSceneBuilder {
           });
         include(a, width / 2);
         include(b, width / 2);
-        await buildProgress.checkpoint();
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
         continue;
       }
       const layer = track.Layer >>> 8;
@@ -234,24 +244,34 @@ export class AllegroSceneBuilder {
         }
         segments.push(segment);
         key = record.Next;
-        if ((segments.length & 255) === 0) await buildProgress.checkpoint();
+        if ((segments.length & 255) === 0) {
+          const pause = buildProgress.checkpoint();
+          if (pause) await pause;
+        }
       }
-      await buildProgress.checkpoint();
+      const pause = buildProgress.checkpoint();
+      if (pause) await pause;
     }
     const stacks = new Map<number, Raw>();
     buildProgress.begin("读取 Padstack");
     for (const stack of db.records(0x1c)) {
       stacks.set(stack.Key, stack);
-      if ((++earlyWork & 31) === 0) await buildProgress.checkpoint();
+      if ((++earlyWork & 31) === 0) {
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
+      }
     }
     const padDecoder = new AllegroPadDecoder(geometry, scale, diagnostics);
+    const padBounds: Bounds = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    function includePad(owner: Pin | Via, pad: PadShape) {
+      const b = new PadShapeGeometry(pad).bounds(owner, padBounds);
+      include([b.minX, b.minY]);
+      include([b.maxX, b.maxY]);
+    }
     function includePads(owner: Pin | Via, pads: PadShape[]) {
       const hole = new DrillShapeGeometry(owner).pad();
-      for (const p of hole ? [...pads, hole] : pads) {
-        const b = new PadShapeGeometry(p).bounds(owner);
-        include([b.minX, b.minY]);
-        include([b.maxX, b.maxY]);
-      }
+      for (const p of pads) includePad(owner, p);
+      if (hole) includePad(owner, hole);
     }
     const viaPads = new Map<string, PadShape[]>();
     const backdrillPads = new Map<string, PadShape[]>();
@@ -373,7 +393,8 @@ export class AllegroSceneBuilder {
       }
       vias.push(placed);
       includePads(placed, placed.pads);
-      await buildProgress.checkpoint();
+      const pause = buildProgress.checkpoint();
+      if (pause) await pause;
     }
     buildProgress.begin("构建器件焊盘");
     for (const fp of db.records(0x2d)) {
@@ -476,14 +497,18 @@ export class AllegroSceneBuilder {
         }
         pins.push(pin);
         includePads(pin, shapes);
-        await buildProgress.checkpoint();
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
       }
     }
     buildProgress.begin("构建铜皮");
     for (const shape of db.records(40)) {
       // Non-copper and unassigned shapes can dominate the source list. Keep
       // checkpoints before all skip branches, not just after displayed zones.
-      if ((++earlyWork & 255) === 0) await buildProgress.checkpoint();
+      if ((++earlyWork & 255) === 0) {
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
+      }
       const classId = shape.Layer & 255,
         layer = shape.Layer >>> 8;
       if (classId === 1 && [0xea, 0xfd].includes(layer)) {
@@ -529,7 +554,8 @@ export class AllegroSceneBuilder {
             });
           addPath(hatch.UnknownArray1[0]);
           key = hatch.Next;
-          await buildProgress.checkpoint();
+          const pause = buildProgress.checkpoint();
+          if (pause) await pause;
         }
         const holeSeen = new Set<number>();
         // Native V251 hatch holes can terminate at their owning shape.
@@ -548,11 +574,12 @@ export class AllegroSceneBuilder {
             });
           addPath(hole.FirstSegmentPtr);
           key = hole.Next;
-          await buildProgress.checkpoint();
+          const pause = buildProgress.checkpoint();
+          if (pause) await pause;
         }
         continue;
       }
-      const { paths, rings } = await geometry.readContours(shape.Key, signal);
+      const { paths, rings } = await geometry.readContours(shape, signal);
       if (!rings.length) {
         diagnostics.push(`铜皮 ${shape.Key} 无有效边界`);
         continue;
@@ -585,7 +612,8 @@ export class AllegroSceneBuilder {
       const b = new ZoneShape(zone).bounds();
       include([b.minX, b.minY]);
       include([b.maxX, b.maxY]);
-      await buildProgress.checkpoint();
+      const pause = buildProgress.checkpoint();
+      if (pause) await pause;
     }
     for (const kind of [0x0e, 0x24]) {
       for (const rect of db.records(kind)) {
@@ -635,7 +663,8 @@ export class AllegroSceneBuilder {
         const box = new ZoneShape(zone).bounds();
         include([box.minX, box.minY]);
         include([box.maxX, box.maxY]);
-        await buildProgress.checkpoint();
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
       }
     }
     buildProgress.begin("构建板框");
@@ -648,7 +677,10 @@ export class AllegroSceneBuilder {
       )
         outline.push(...geometry.readPath(graphic.SegmentPtr));
       if (graphic.Layer === 0xf901) dimensionGraphics.push(graphic);
-      if ((++graphicWork & 255) === 0) await buildProgress.checkpoint();
+      if ((++graphicWork & 255) === 0) {
+        const pause = buildProgress.checkpoint();
+        if (pause) await pause;
+      }
     }
     if (!Number.isFinite(bounds.minX)) throw parserError("brdNoGeometry");
     buildProgress.begin("构建原始文字");

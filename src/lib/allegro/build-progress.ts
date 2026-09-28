@@ -30,11 +30,11 @@ export class AllegroBuildProgress {
     this.signal?.throwIfAborted();
   }
 
-  async checkpoint(): Promise<void> {
+  checkpoint(): Promise<void> | undefined {
     const pause = this.pauseIfNeeded();
     if (pause) {
       this.progress?.(this.stage);
-      await pause;
+      return pause;
     }
   }
 

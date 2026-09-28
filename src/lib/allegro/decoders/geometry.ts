@@ -2,6 +2,7 @@ import { BoardIteration } from "../../board/iteration";
 import type { Point, Segment } from "../../board/model";
 import { ArcShape } from "../../board/shapes/arc";
 import { PathShape } from "../../board/shapes/path";
+import type { Raw } from "../binary/reader";
 import type { BrdDatabase } from "../database";
 import { cooperative } from "../../cooperative";
 import { parserError } from "../../parser-error";
@@ -16,13 +17,14 @@ export class AllegroGeometryDecoder {
   private *readPathSteps(
     first: number,
     hatch = false,
+    owner?: number,
   ): Generator<void, Segment[]> {
     const db = this.database;
     const scale = this.scale;
     const result: Segment[] = [],
       seen = new Set<number>();
     let key = first;
-    while (key) {
+    while (key && key !== owner) {
       if (seen.has(key)) {
         if (key === first) break;
         throw parserError("brdPathChainLoop", { detail: key });
@@ -80,29 +82,34 @@ export class AllegroGeometryDecoder {
     return rings;
   }
   /** Undefined yields are bounded checkpoints inside long paths or empty hole chains. */
-  private *shapePathSteps(id: number): Generator<Segment[] | void> {
+  private *shapePathSteps(source: number | Raw): Generator<Segment[] | void> {
     const db = this.database;
-    const shape = db.get(id);
+    const id = typeof source === "number" ? source : source.Key;
+    // Zero-key records remain in byType but are not indexed by the parser.
+    // Preserve the ID lookup semantics before reusing a supplied record.
+    const shape = typeof source === "number" || id === 0 ? db.get(id) : source;
     if (shape?.type !== 40) return;
-    const outer = yield* this.readPathSteps(shape.FirstSegmentPtr);
+    // Owner links terminate a path. Their record has already been decoded here;
+    // do not allocate and decode it again just to rediscover its non-edge type.
+    const outer = yield* this.readPathSteps(shape.FirstSegmentPtr, false, id);
     if (outer.length) yield outer;
     const seen = new Set<number>();
     let key = shape.FirstKeepoutPtr;
-    while (key) {
+    while (key && key !== id) {
       const hole = db.get(key);
       if (hole?.type !== 52) break;
       if (seen.has(key)) throw parserError("brdHoleChainLoop", { detail: key });
       seen.add(key);
-      const path = yield* this.readPathSteps(hole.FirstSegmentPtr);
+      const path = yield* this.readPathSteps(hole.FirstSegmentPtr, false, key);
       if (path.length) yield path;
       key = hole.Next;
       if ((seen.size & 255) === 0) yield;
     }
   }
-  private *contourSteps(id: number) {
+  private *contourSteps(source: number | Raw) {
     const paths: Segment[][] = [],
       rings: Point[][] = [];
-    for (const path of this.shapePathSteps(id)) {
+    for (const path of this.shapePathSteps(source)) {
       if (path) {
         const ring = yield* new PathShape(path).flattenSteps();
         if (ring.length >= 3) {
@@ -116,9 +123,9 @@ export class AllegroGeometryDecoder {
   }
   /** Stored copper contours, including holes, with main-thread cancellation checkpoints.
    * Shares the synchronous readers and identical chord tolerance/point ordering. */
-  async readContours(id: number, signal?: AbortSignal) {
+  async readContours(source: number | Raw, signal?: AbortSignal) {
     const pauseIfNeeded = cooperative(signal, 10),
-      steps = this.contourSteps(id);
+      steps = this.contourSteps(source);
     signal?.throwIfAborted();
     try {
       let step = steps.next();

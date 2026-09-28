@@ -118,13 +118,15 @@ export class AllegroPadDecoder {
       if (geometry.rings.length) {
         value.custom = geometry.rings;
         value.customPaths = geometry.paths;
-        const b = new PadGeometry(value).bounds({
-          at: [0, 0],
-          angle: 0,
-          back: false,
-        });
-        if (value.width <= 0) value.width = b.maxX - b.minX;
-        if (value.height <= 0) value.height = b.maxY - b.minY;
+        if (value.width <= 0 || value.height <= 0) {
+          const b = new PadGeometry(value).bounds({
+            at: [0, 0],
+            angle: 0,
+            back: false,
+          });
+          if (value.width <= 0) value.width = b.maxX - b.minX;
+          if (value.height <= 0) value.height = b.maxY - b.minY;
+        }
       }
     }
     if (!new PadGeometry(value).supported())

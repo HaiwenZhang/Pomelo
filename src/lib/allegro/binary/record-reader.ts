@@ -37,10 +37,19 @@ const VARIABLE_RECORD_DECODERS = new Map<number, VariableRecordDecoder>([
 
 /** Reads bodies after Reader.recordType consumes a modern or packed legacy tag. */
 export class AllegroRecordReader {
+  private readonly fixedReader: AllegroFixedLayoutReader;
+  private readonly scanByteLengths: Uint16Array;
   constructor(
     readonly reader: Reader,
     readonly header: BrdHeader,
-  ) {}
+  ) {
+    this.fixedReader = new AllegroFixedLayoutReader(reader, header.version);
+    // Layout decisions depend only on the file version, not each record.
+    this.scanByteLengths = Uint16Array.from(
+      { length: 0x3f },
+      (_, type) => getScannableRecordByteLength(type, header.version) ?? 0,
+    );
+  }
 
   read(recordType: number): RawRecord {
     const decodeRecord = VARIABLE_RECORD_DECODERS.get(recordType);
@@ -49,10 +58,7 @@ export class AllegroRecordReader {
   }
 
   private readFixedRecord(recordType: number): RawRecord {
-    const record = new AllegroFixedLayoutReader(
-      this.reader,
-      this.header.version,
-    ).read(recordType);
+    const record = this.fixedReader.read(recordType);
     if (!record)
       throw parserError("brdUnknownRecord", {
         detail: `0x${recordType.toString(16)}`,
@@ -64,16 +70,14 @@ export class AllegroRecordReader {
 
   /** Initial indexing needs only the key and boundary. Variable records still validate payloads. */
   scanKey(recordType: number): number | undefined {
-    const recordByteLength = getScannableRecordByteLength(
-      recordType,
-      this.header.version,
-    );
-    if (recordByteLength === undefined) return this.read(recordType).Key;
+    const recordByteLength = this.scanByteLengths[recordType];
+    if (!recordByteLength) return this.read(recordType).Key;
 
     const bodyOffset = this.reader.offset;
     // The type byte was already consumed. Validate the entire remaining body
     // before reading its key, including records whose key happens to be zero.
     this.reader.skip(recordByteLength - 1);
+    if (recordType === 0x35) return undefined;
     const keyOffset = bodyOffset + 3;
     return this.reader.view.getUint32(keyOffset, true);
   }

@@ -1,12 +1,13 @@
 import type { BrdHeader } from "./binary/header";
 import { OffsetIndex } from "./binary/offset-index";
+import type { OffsetList } from "./binary/offset-list";
 import type { Raw } from "./binary/reader";
 import { Reader } from "./binary/reader";
 import { AllegroRecordReader } from "./binary/record-reader";
 import { BrdTextDecoder } from "./binary/text-decoder";
 export class BrdDatabase {
   readonly offsets = new OffsetIndex();
-  readonly byType = new Map<number, number[]>();
+  readonly byType = new Map<number, OffsetList | number[]>();
   count = 0;
   endOffset = 0;
   private readonly reader: Reader;
@@ -26,11 +27,10 @@ export class BrdDatabase {
     const reader = this.reader;
     reader.seek(offset);
     const type = reader.recordType(this.header.version);
-    return {
-      ...this.decoder.read(type),
-      type,
-      offset,
-    } as Raw;
+    const record = this.decoder.read(type) as Raw;
+    record.type = type;
+    record.offset = offset;
+    return record;
   }
   get(key: number) {
     const offset = this.offsets.get(key);
