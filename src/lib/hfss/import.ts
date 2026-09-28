@@ -7,6 +7,7 @@ import type {
   Segment,
   Via,
 } from "../board/model";
+import { BOND_TOP_LAYER, BOND_WIRE_TOP_LAYER } from "../board/layers";
 import { CopperMesh } from "../board/copper-mesh";
 import { PadShape as PadShapeGeometry } from "../board/shapes/pad";
 import { PathShape } from "../board/shapes/path";
@@ -139,6 +140,47 @@ export async function importHfss(
     if (info.parent !== -1) continue;
     const layer = layerIds.get(info.layer),
       net = netId(info.net);
+    if (primitive.schema === 16) {
+      if (source.layers.get(info.layer)?.type !== "wirebond")
+        throw new Error(`HFSS 键合线 ${info.id} 的层类型无效`);
+      const path = defObject(primitive.fields[0], 14),
+        width = defNumber(path.fields[4]) * 1000,
+        profile = defText(primitive.fields[1]),
+        material = defText(primitive.fields[3]);
+      if (width <= 0 || source.voids.has(info.id))
+        throw new Error(`HFSS 键合线 ${info.id} 的几何无效`);
+      if (!scene.specialLayers)
+        scene.specialLayers = [
+          {
+            id: BOND_WIRE_TOP_LAYER,
+            name: source.layers.get(info.layer)!.name,
+            color: "#e4d95b",
+            kind: "bond-wire",
+            category: "bond-wire",
+          },
+        ];
+      const trackId = nextId++;
+      for (const segment of defPolygonPath(defObject(path.fields[6], 36))) {
+        Object.assign(segment, {
+          id: nextId++,
+          trackId,
+          layer: BOND_WIRE_TOP_LAYER,
+          net,
+          width,
+          bondWire: {
+            profile,
+            material,
+            sourcePin: -1,
+            finger: -1,
+            reference: components.get(info.component) ?? "",
+            pinName: "",
+          },
+        });
+        scene.segments.push(segment);
+        include(new SegmentShape(segment).bounds());
+      }
+      continue;
+    }
     if (
       source.layers.get(info.layer)?.type === "outline" &&
       primitive.schema === 14
@@ -227,20 +269,38 @@ export async function importHfss(
     let templates = shapeCache.get(binding.id);
     if (!templates) {
       templates = [];
-      for (const copperLayer of copper) {
-        if (!binding.usedLayers.has(copperLayer.id)) continue;
-        const definitionLayerId = binding.forward[copperLayer.id] ?? -1;
-        if (definitionLayerId === -1) continue;
-        const definitionLayer =
-          binding.definition.layers.get(definitionLayerId)!;
-        const shape = defPadShape(
-          definitionLayer.pad,
-          layerIds.get(copperLayer.id)!,
-        );
-        if (!shape) continue;
-        templates.push(shape);
+      if (binding.die) {
+        const sourceLayer = binding.definition.layers.get(binding.first)!;
+        const shape = defPadShape(sourceLayer.pad, BOND_TOP_LAYER);
+        if (shape) templates.push(shape);
+      } else {
+        for (const copperLayer of copper) {
+          if (!binding.usedLayers.has(copperLayer.id)) continue;
+          const definitionLayerId = binding.forward[copperLayer.id] ?? -1;
+          if (definitionLayerId === -1) continue;
+          const definitionLayer =
+            binding.definition.layers.get(definitionLayerId)!;
+          const shape = defPadShape(
+            definitionLayer.pad,
+            layerIds.get(copperLayer.id)!,
+          );
+          if (shape) templates.push(shape);
+        }
       }
       shapeCache.set(binding.id, templates);
+    }
+    if (
+      binding.die &&
+      !scene.specialLayers?.some((layer) => layer.id === BOND_TOP_LAYER)
+    ) {
+      scene.specialLayers ??= [];
+      scene.specialLayers.push({
+        id: BOND_TOP_LAYER,
+        name: "BOND TOP",
+        color: "#d7cd58",
+        kind: "die-pad",
+        category: "etch",
+      });
     }
     const hole = defDrill(binding.definition.hole),
       drill = hole.height;
@@ -278,7 +338,7 @@ export async function importHfss(
       net = netId(pad.net);
     let owner: Pin | Via;
     const angle = pad.rotation + hole.angle;
-    if (pad.pin) {
+    if (pad.pin || binding.die) {
       owner = {
         id,
         net,
@@ -290,6 +350,11 @@ export async function importHfss(
         drill,
         shapes,
       };
+      if (binding.die)
+        owner.die = {
+          sourceReference: binding.id,
+          padstackName: binding.definition.name,
+        };
       scene.pins.push(owner);
     } else {
       const first = layerIds.get(binding.first),

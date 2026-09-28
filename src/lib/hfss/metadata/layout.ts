@@ -115,7 +115,7 @@ export class DefLayoutReader {
         if (pending) await pending;
       }
       const primitive = defObject(value);
-      if (![12, 13, 14, 15].includes(primitive.schema))
+      if (![12, 13, 14, 15, 16].includes(primitive.schema))
         throw new Error(`HFSS 未支持图元类型 ${primitive.schema}`);
       const info = defPrimitiveInfo(primitive);
       if (primitives.has(info.id))
@@ -157,7 +157,9 @@ export async function readDefLayout(
   return new DefLayoutReader(db).read(signal);
 }
 export function defPrimitiveInfo(primitive: DefObject) {
-  const info = defObject(primitive.fields[0], 11),
+  const geometry =
+      primitive.schema === 16 ? defObject(primitive.fields[0], 14) : primitive,
+    info = defObject(geometry.fields[0], 11),
     base = defObject(info.fields[0], 10);
   return {
     id: defInteger(defObject(base.fields[0], 5).fields[0]),

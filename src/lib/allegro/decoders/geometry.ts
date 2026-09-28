@@ -9,10 +9,13 @@ export class AllegroGeometryDecoder {
     readonly database: BrdDatabase,
     readonly scale: number,
   ) {}
-  readPath(first: number): Segment[] {
-    return BoardIteration.complete(this.readPathSteps(first));
+  readPath(first: number, hatch = false): Segment[] {
+    return BoardIteration.complete(this.readPathSteps(first, hatch));
   }
-  private *readPathSteps(first: number): Generator<void, Segment[]> {
+  private *readPathSteps(
+    first: number,
+    hatch = false,
+  ): Generator<void, Segment[]> {
     const db = this.database;
     const scale = this.scale;
     const result: Segment[] = [],
@@ -38,8 +41,23 @@ export class AllegroGeometryDecoder {
         width: r.Width * scale,
       };
       if (r.type === 1) {
-        const center: Point = [r.CenterX * scale, r.CenterY * scale],
-          radius = Math.hypot(a[0] - center[0], a[1] - center[1]);
+        const roundGrid = (value: number) => {
+          const lower = Math.floor(value);
+          return value - lower === 0.5
+            ? lower % 2 === 0
+              ? lower
+              : lower + 1
+            : Math.round(value);
+        };
+        const center: Point = [
+          (hatch ? roundGrid(r.CenterX) : r.CenterX) * scale,
+          (hatch ? roundGrid(r.CenterY) : r.CenterY) * scale,
+        ];
+        const radius = hatch
+          ? (Math.hypot(a[0] - center[0], a[1] - center[1]) +
+              Math.hypot(b[0] - center[0], b[1] - center[1])) /
+            2
+          : Math.hypot(a[0] - center[0], a[1] - center[1]);
         const start = Math.atan2(a[1] - center[1], a[0] - center[0]),
           end = Math.atan2(b[1] - center[1], b[0] - center[0]);
         segment.arc = {

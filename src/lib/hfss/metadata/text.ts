@@ -149,7 +149,17 @@ export class DefTextReader {
         continue;
       }
       const current = stack.at(-1)!,
-        statement = new DefStatementReader(line).read();
+        counted = /^([A-Za-z_][A-Za-z_0-9]*)\[(\d+):\s*(.*)\]$/.exec(line),
+        statement = new DefStatementReader(
+          counted ? `${counted[1]}(${counted[3]})` : line,
+        ).read();
+      if (counted) {
+        if (
+          typeof statement.value !== "object" ||
+          statement.value.args.length !== Number(counted[2])
+        )
+          throw new Error(`HFSS ${counted[1]} 数量不符，第 ${lineNumber} 行`);
+      }
       if (statement.key !== undefined) {
         if (current.properties.has(statement.key))
           throw new Error(`HFSS 重复属性 ${statement.key}`);

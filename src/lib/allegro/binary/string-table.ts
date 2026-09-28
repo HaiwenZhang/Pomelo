@@ -18,6 +18,7 @@ export class AllegroStringTableReader {
     for (let i = 0; i < header.stringCount; i++) {
       signal?.throwIfAborted();
       const id = r.u32();
+      if (strings.has(id)) throw new Error(`重复 BRD 字符串 ID ${id}`);
       strings.set(id, r.cstring());
       if (performance.now() >= deadline) {
         progress?.(i / header.stringCount);

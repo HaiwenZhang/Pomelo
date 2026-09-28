@@ -77,6 +77,7 @@ export interface DefPadBinding {
   flipped: boolean;
   forward: number[];
   usedLayers: Set<number>;
+  die: boolean;
   source: DefBlock;
 }
 export interface DefPadstacks {
@@ -162,8 +163,6 @@ export class DefPadstackReader {
         throw new Error(`HFSS Padstack 绑定无效 ${id}`);
       const first = integer(source.properties.get("fl")),
         last = integer(source.properties.get("tl"));
-      if (!layout.layers.has(first) || !layout.layers.has(last))
-        throw new Error(`HFSS Padstack 起止层缺失 ${id}`);
       const flipped = source.properties.get("flp");
       if (typeof flipped !== "boolean")
         throw new Error(`HFSS Padstack 镜像标志无效 ${id}`);
@@ -176,6 +175,18 @@ export class DefPadstackReader {
         if (layerId !== -1 && !definition.layers.has(layerId))
           throw new Error(`HFSS Padstack 映射引用缺失定义层 ${layerId}`);
       const usedLayers = defUsedPadLayers(text(source.properties.get("pum")));
+      const dieBinding =
+        last === 0 &&
+        source.properties.get("sbl") === -100 &&
+        definition.layers.size === 1 &&
+        definition.layers.has(first) &&
+        !forward.length &&
+        !usedLayers.size;
+      if (
+        !layout.layers.has(first) ||
+        (!layout.layers.has(last) && !dieBinding)
+      )
+        throw new Error(`HFSS Padstack 起止层缺失 ${id}`);
       for (const layer of usedLayers)
         if (!layout.layers.has(layer))
           throw new Error(`HFSS Padstack 使用层缺失 ${layer}`);
@@ -187,6 +198,7 @@ export class DefPadstackReader {
         flipped,
         forward,
         usedLayers,
+        die: dieBinding,
         source,
       });
     }
@@ -283,12 +295,7 @@ export function defStandardPad(call: DefCall, layer: number): PadShape | null {
 }
 /** Embedded polygon coordinates use an explicit unit and 1e200 arc sentinel;
  * the native PolygonData representation uses DBL_MAX instead. */
-export function defTextPolygon(call: DefCall): DefObject {
-  const polygon = call.args.find(
-    (a) => typeof a.value === "object" && a.value.name === "ply",
-  )?.value;
-  if (!polygon || typeof polygon !== "object")
-    throw new Error("HFSS 多边形缺少 ply");
+function defTextContour(polygon: DefCall): DefObject {
   const points = polygon.args.find(
     (a) => typeof a.value === "object" && a.value.name === "pt",
   )?.value;
@@ -327,14 +334,37 @@ export function defTextPolygon(call: DefCall): DefObject {
     values.length -= 2;
   return { schema: 36, offset: 0, end: 0, fields: [closed ? 1 : 0, 0, values] };
 }
+export function defTextPolygon(call: DefCall): DefObject {
+  const polygon = call.args.find(
+    (a) => typeof a.value === "object" && a.value.name === "ply",
+  )?.value;
+  if (!polygon || typeof polygon !== "object")
+    throw new Error("HFSS 多边形缺少 ply");
+  return defTextContour(polygon);
+}
 export function defPadShape(call: DefCall, layer: number): PadShape | null {
   if (argument(call, "shp") !== "Ply") return defStandardPad(call, layer);
   const polygon = defTextPolygon(call);
   if (polygon.fields[0] !== 1) throw new Error("HFSS 焊盘多边形必须闭合");
   const angle = defQuantity(argument(call, "R"), "angle");
-  const path = defPolygonPath(polygon).map((s) =>
-    new ShapeTransform([0, 0], angle, false).segment(s),
+  const source = call.args.find(
+    (a) => typeof a.value === "object" && a.value.name === "ply",
+  )?.value as DefCall;
+  const holes = source.args.find(
+    (a) => typeof a.value === "object" && a.value.name === "hls",
+  )?.value as DefCall | undefined;
+  const contours = [polygon];
+  for (const arg of holes?.args ?? []) {
+    if (typeof arg.value !== "object" || arg.value.name !== "hl")
+      throw new Error("HFSS 多边形孔洞类型无效");
+    contours.push(defTextContour(arg.value));
+  }
+  const paths = contours.map((contour) =>
+    defPolygonPath(contour).map((s) =>
+      new ShapeTransform([0, 0], angle, false).segment(s),
+    ),
   );
+  const path = paths[0];
   if (!path.length) return null;
   const bounds = {
     minX: Infinity,
@@ -358,8 +388,8 @@ export function defPadShape(call: DefCall, layer: number): PadShape | null {
       defQuantity(argument(call, "X"), "length") * 1000,
       defQuantity(argument(call, "Y"), "length") * 1000,
     ],
-    customPaths: [path],
-    custom: [new PathShape(path).flatten()],
+    customPaths: paths,
+    custom: paths.map((contour) => new PathShape(contour).flatten()),
   };
 }
 /** Preserve a true circular/capsule drill in the renderer's existing contract.
@@ -367,6 +397,21 @@ export function defPadShape(call: DefCall, layer: number): PadShape | null {
 export function defDrill(call: DefCall) {
   if (argument(call, "shp") !== "Ply") {
     const shape = defStandardShape(call);
+    if (shape.shape === "Ov") {
+      const [width, height, radius] = shape.sizes.map((size) => size * 1000);
+      if (
+        width <= 0 ||
+        height <= 0 ||
+        Math.abs(radius - Math.min(width, height) / 2) > 1e-9
+      )
+        throw new Error("HFSS 槽孔圆角半径无效");
+      return {
+        width,
+        height,
+        angle: shape.rotation,
+        offset: [shape.x * 1000, shape.y * 1000] as [number, number],
+      };
+    }
     if (!["No", "Cir"].includes(shape.shape))
       throw new Error(`HFSS 未支持钻孔形状 ${shape.shape}`);
     const diameter = (shape.sizes[0] ?? 0) * 1000;

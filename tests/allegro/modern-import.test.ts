@@ -62,6 +62,16 @@ test("modern record groups resume across aligned zero gaps; old formats stop", a
     expect(db.get(600)?.type).toBe(version === 174 ? undefined : 0x21);
   }
 });
+
+test("duplicate BRD string IDs fail instead of replacing an earlier name", async () => {
+  const { b, v } = file(174);
+  v.setUint32(0x194, 2, true);
+  v.setUint32(0x1200, 9, true);
+  v.setUint8(0x1204, 65);
+  v.setUint32(0x1208, 9, true);
+  v.setUint8(0x120c, 66);
+  await expect(new AllegroParser(b).parse()).rejects.toThrow(/重复.*字符串.*9/);
+});
 test("zero scanning stops at invalid or unaligned trailers and never skips unknown records", async () => {
   for (const [offset, type] of [
     [0x1241, 0x21],

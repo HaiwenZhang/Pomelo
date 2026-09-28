@@ -249,7 +249,7 @@ export class AllegroSceneBuilder {
         include([b.maxX, b.maxY]);
       }
     }
-    const viaPads = new Map<number, PadShape[]>();
+    const viaPads = new Map<string, PadShape[]>();
     const backdrillPads = new Map<string, PadShape[]>();
     const getStackRecord = (id: number) => stacks.get(id) ?? db.get(id);
     const padstacks = new AllegroPadstackResolver(
@@ -270,7 +270,18 @@ export class AllegroSceneBuilder {
         );
         continue;
       }
-      let pads = viaPads.get(stack.Key);
+      const reverseLayerOrder = (via.LayerInfo & 0x3000) === 0x3000,
+        flipLayers = (via.LayerInfo & 0x2000) !== 0,
+        mappedLayer = (i: number) => {
+          const source = stack.StartLayer + i;
+          return reverseLayerOrder
+            ? layers.length - 1 - source
+            : flipLayers
+              ? layers.length - stack.StartLayer - stack.LayerCount + i
+              : source;
+        },
+        padKey = `${stack.Key}:${reverseLayerOrder ? "reverse" : flipLayers ? "flip" : "normal"}`;
+      let pads = viaPads.get(padKey);
       if (!pads) {
         pads = [];
         for (let i = 0; i < stack.LayerCount; i++) {
@@ -280,15 +291,17 @@ export class AllegroSceneBuilder {
             ];
           const value = padDecoder.shape(
             pad,
-            stack.StartLayer + i,
+            mappedLayer(i),
             point(pad.OffsetX, pad.OffsetY),
             stack.Key,
           );
           if (value) pads.push(value);
         }
-        viaPads.set(stack.Key, pads);
+        viaPads.set(padKey, pads);
       }
       const at = point(via.CoordsX, via.CoordsY);
+      const firstLayer = mappedLayer(0),
+        lastLayer = mappedLayer(stack.LayerCount - 1);
       const placed: Via = {
         id: via.Key,
         net: assignments.get(via.Key) ?? 0,
@@ -297,8 +310,8 @@ export class AllegroSceneBuilder {
         padstackName: db.strings.get(stack.PadStr),
         drill: stack.DrillSize * scale,
         drillShape: padDecoder.drill(stack),
-        startLayer: stack.StartLayer,
-        endLayer: stack.StartLayer + stack.LayerCount - 1,
+        startLayer: Math.min(firstLayer, lastLayer),
+        endLayer: Math.max(firstLayer, lastLayer),
         pads,
       };
       if (stack.PadType === 30) {
@@ -345,7 +358,7 @@ export class AllegroSceneBuilder {
           rotationDegrees: via.Unknown5 / 1000,
           mirrored: (via.LayerInfo & 0x100) !== 0,
         };
-        const key = `${stack.Key}:${new BackdrillShape(span).label()}`;
+        const key = `${padKey}:${new BackdrillShape(span).label()}`;
         let effective = backdrillPads.get(key);
         if (!effective) {
           effective = BackdrillShape.applyPads(pads, placed.backdrill);
@@ -389,12 +402,17 @@ export class AllegroSceneBuilder {
           continue;
         }
         const localAngle = (pad.Rotation * Math.PI) / 180000;
-        const at = new PointShape(point(pad.CoordsX, pad.CoordsY)).place(
-            origin,
-            angle,
-            back,
-          ),
-          shapes: PadShape[] = [];
+        const offset = new PointShape([
+          back ? -pad.CoordsX : pad.CoordsX,
+          pad.CoordsY,
+        ]).rotate(angle);
+        const grid = (value: number) =>
+          Math.sign(value) * Math.floor(Math.abs(value) + 0.5);
+        const at: Point = [
+          (fp.CoordX + grid(offset[0])) * scale,
+          (fp.CoordY + grid(offset[1])) * scale,
+        ];
+        const shapes: PadShape[] = [];
         for (let i = 0; i < stack.LayerCount; i++) {
           const p =
             stack.Components[
@@ -474,6 +492,46 @@ export class AllegroSceneBuilder {
       // user-drawn zone boundary. Never fill unrelated boundary/keepout classes.
       if (classId !== 6 || !assignments.has(shape.Key) || !layers[layer])
         continue;
+      if ((shape.Unknown2 & 255) === 2) {
+        const net = assignments.get(shape.Key)!;
+        const addPath = (first: number) => {
+          for (const segment of geometry.readPath(first, true)) {
+            segment.layer = layer;
+            segment.net = net;
+            segment.trackId = shape.Key;
+            segments.push(segment);
+            const box = new SegmentShape(segment).bounds();
+            include([box.minX, box.minY]);
+            include([box.maxX, box.maxY]);
+          }
+        };
+        addPath(shape.FirstSegmentPtr);
+        const hatchSeen = new Set<number>();
+        for (let key = shape.Unknown4; key && key !== shape.Key;) {
+          if (hatchSeen.has(key))
+            throw new Error(`网格铺铜 ${shape.Key} 的线条链循环 ${key}`);
+          hatchSeen.add(key);
+          const hatch = db.get(key);
+          if (hatch?.type !== 0x20)
+            throw new Error(`网格铺铜 ${shape.Key} 缺失线条 ${key}`);
+          addPath(hatch.UnknownArray1[0]);
+          key = hatch.Next;
+          await buildProgress.checkpoint();
+        }
+        const holeSeen = new Set<number>();
+        for (let key = shape.FirstKeepoutPtr; key;) {
+          if (holeSeen.has(key))
+            throw new Error(`网格铺铜 ${shape.Key} 的孔洞链循环 ${key}`);
+          holeSeen.add(key);
+          const hole = db.get(key);
+          if (hole?.type !== 0x34)
+            throw new Error(`网格铺铜 ${shape.Key} 缺失孔洞 ${key}`);
+          addPath(hole.FirstSegmentPtr);
+          key = hole.Next;
+          await buildProgress.checkpoint();
+        }
+        continue;
+      }
       const { paths, rings } = await geometry.readContours(shape.Key, signal);
       if (!rings.length) {
         diagnostics.push(`铜皮 ${shape.Key} 无有效边界`);
@@ -508,6 +566,54 @@ export class AllegroSceneBuilder {
       include([b.minX, b.minY]);
       include([b.maxX, b.maxY]);
       await buildProgress.checkpoint();
+    }
+    for (const kind of [0x0e, 0x24]) {
+      for (const rect of db.records(kind)) {
+        if ((rect.Layer & 255) !== 6 || !assignments.has(rect.Key)) continue;
+        const layer = rect.Layer >>> 8;
+        if (!layers[layer])
+          throw new Error(`铜矩形 ${rect.Key} 的层 ${layer} 未定义`);
+        const [x, y, u, v] = rect.Coords,
+          angle = (rect.Rotation * Math.PI) / 180000,
+          dx = u - x,
+          dy = v - y,
+          c = Math.cos(angle),
+          s = Math.sin(angle),
+          corners: Point[] = (
+            [
+              [0, 0],
+              [dx, 0],
+              [dx, dy],
+              [0, dy],
+            ] as Point[]
+          ).map(([a, b]) => [
+            (x + a * c - b * s) * scale,
+            (y + a * s + b * c) * scale,
+          ]);
+        const path: Segment[] = corners.map((a, index) => ({
+          id: rect.Key,
+          trackId: rect.Key,
+          layer,
+          net: assignments.get(rect.Key)!,
+          a,
+          b: corners[(index + 1) % corners.length],
+          width: 0,
+        }));
+        const mesh = await new CopperMesh([corners]).build(signal, [path]),
+          zone: Zone = {
+            id: rect.Key,
+            layer,
+            net: assignments.get(rect.Key)!,
+            paths: [path],
+            rings: [],
+            ...mesh,
+          };
+        zones.push(zone);
+        const box = new ZoneShape(zone).bounds();
+        include([box.minX, box.minY]);
+        include([box.maxX, box.maxY]);
+        await buildProgress.checkpoint();
+      }
     }
     buildProgress.begin("构建板框");
     const dimensionGraphics: Raw[] = [];
