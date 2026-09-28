@@ -13,7 +13,7 @@ fn vs(@builtin(vertex_index) vi: u32, @location(0) source: vec4f, @location(1) p
   if (params.z < .5) {
     ab = vec4f(ab.xy, relativePosition(source.zw, low.zw));
   }
-  let corners = array<vec2f, 6>(vec2f(- 1, - 1), vec2f(1, - 1), vec2f(- 1, 1), vec2f(- 1, 1), vec2f(1, - 1), vec2f(1, 1));
+  let corners = array<vec2f, 4>(vec2f(- 1, - 1), vec2f(1, - 1), vec2f(- 1, 1), vec2f(1, 1));
   let aa = 2.0 / view.camera.z;
   var center = ab.xy;
   var extent = vec2f(ab.z + params.x * .5 + aa);
@@ -32,7 +32,7 @@ fn vs(@builtin(vertex_index) vi: u32, @location(0) source: vec4f, @location(1) p
   out.local = (center - ab.xy) + corners[vi] * extent;
   out.ab = ab;
   out.params = params;
-  out.color = color;
+  out.color = materialColor(color);
   out.circleLow = vec4f(0);
   if (params.z > 6.5) {
     let limit = view.viewport.xy * .5 / view.camera.z;

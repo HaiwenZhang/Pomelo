@@ -7,7 +7,7 @@ struct Out {
 fn vs(@location(0) position: vec2f, @location(1) color: vec4f, @location(2) low: vec2f) -> Out {
     var out: Out;
     out.position = clipPosition(relativePosition(position, low));
-    out.color = color;
+    out.color = materialColor(color);
     return out;
 }
 

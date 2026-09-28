@@ -1,5 +1,5 @@
 import { BoardDisplay } from "../board/display";
-import type { BoardScene, Point, Zone } from "../board/model";
+import type { BoardScene, Zone } from "../board/model";
 /// <reference types="@webgpu/types" />
 
 import type { DisplayOptions } from "../board/display";
@@ -7,9 +7,11 @@ import type { DisplayOptions } from "../board/display";
 import type { IDisposable } from "../disposable";
 import type { Camera } from "../interaction/camera";
 import type { BoardObject, PickHit, Selection } from "../interaction/picking";
+import type { ColorMode } from "./color-mode";
 import type { AreaLabelIndex } from "./area-label-index";
 import { ViewCulling } from "./view-culling";
-import { BoardLabelLayout } from "./board-label-layout";
+import { DrawBundleCache } from "./draw-bundle-cache";
+import { LabelLayoutCache } from "./label-layout-cache";
 import type { TrackLabelIndex } from "./track-label-index";
 import type { ViaLabelIndex } from "./via-label-index";
 import type { GpuBatch } from "./webgpu-batch-uploader";
@@ -17,6 +19,7 @@ import type { WebGPUResources } from "./webgpu-resources";
 
 export interface FrameState {
   scene: BoardScene | null;
+  colorMode?: ColorMode;
   display: DisplayOptions;
   batches: GpuBatch[];
   selectionBatches: GpuBatch[];
@@ -31,12 +34,16 @@ export interface FrameState {
 }
 
 export class WebGPUFrame implements IDisposable {
+  readonly labelLayout = new LabelLayoutCache();
+  private readonly bundles: DrawBundleCache;
   private stencil: GPUTexture | null = null;
 
   constructor(
     private readonly resources: WebGPUResources,
     private readonly camera: Camera,
-  ) {}
+  ) {
+    this.bundles = new DrawBundleCache(resources.device, resources.format);
+  }
 
   draw(state: FrameState) {
     const frameRenderer = this;
@@ -59,6 +66,12 @@ export class WebGPUFrame implements IDisposable {
       maxX: viewCenterX + halfWidth,
       minY: viewCenterY - halfHeight,
       maxY: viewCenterY + halfHeight,
+    };
+    const localView = {
+      minX: frameRenderer.camera.x - halfWidth,
+      maxX: frameRenderer.camera.x + halfWidth,
+      minY: frameRenderer.camera.y - halfHeight,
+      maxY: frameRenderer.camera.y + halfHeight,
     };
     const width = Math.max(
         1,
@@ -103,7 +116,7 @@ export class WebGPUFrame implements IDisposable {
       0,
       frameRenderer.camera.x - Math.fround(frameRenderer.camera.x),
       frameRenderer.camera.y - Math.fround(frameRenderer.camera.y),
-      0,
+      state.colorMode === "net" ? 1 : 0,
       0,
     ]);
     // Native Shapes fill/labels do not inherit Global. Shape boundaries remain
@@ -134,8 +147,8 @@ export class WebGPUFrame implements IDisposable {
       values,
     );
     if (state.scene)
-      frameRenderer.resources.labels.update(
-        BoardLabelLayout.layout({
+      this.labelLayout.update(
+        {
           scene: state.scene,
           font: frameRenderer.resources.labels.font,
           camera: frameRenderer.camera,
@@ -145,9 +158,105 @@ export class WebGPUFrame implements IDisposable {
           viaIndex: state.viaLabelIndex,
           trackIndex: state.trackLabelIndex,
           areaIndex: state.areaLabelIndex,
-        }),
+        },
+        (batches) => frameRenderer.resources.labels.update(batches),
       );
-    else frameRenderer.resources.labels.update(new Map());
+    else {
+      this.labelLayout.clear();
+      frameRenderer.resources.labels.update(new Map());
+    }
+    const curves = frameRenderer.resources.curveFills;
+    curves.beginFrame();
+    if (frameRenderer.camera.scale * devicePixelRatio > 1000) {
+      const prepared = new Set<Zone>();
+      for (const batches of [state.batches, state.selectionBatches]) {
+        if (
+          batches === state.selectionBatches &&
+          (state.display.opacity <= 0 || state.display.shapes <= 0)
+        )
+          continue;
+        for (const batch of batches) {
+          if (
+            !batch.owner.alive ||
+            batch.category !== "zone" ||
+            !batch.colorBuffer ||
+            !BoardDisplay.isBatchVisible(
+              state.display,
+              batch,
+              batches === state.selectionBatches,
+            )
+          )
+            continue;
+          for (const zone of batch.zones ?? []) {
+            if (zone.bounds && !ViewCulling.overlaps(zone.bounds, view))
+              continue;
+            const source = state.zoneById.get(zone.id);
+            if (
+              !source ||
+              prepared.has(source) ||
+              !curves.eligible(
+                source,
+                frameRenderer.camera.scale,
+                devicePixelRatio,
+              )
+            )
+              continue;
+            curves.prepare(
+              source,
+              view,
+              state.scene
+                ? [
+                    (state.scene.bounds.minX + state.scene.bounds.maxX) / 2,
+                    (state.scene.bounds.minY + state.scene.bounds.maxY) / 2,
+                  ]
+                : [0, 0],
+              frameRenderer.camera.scale,
+              devicePixelRatio,
+            );
+            prepared.add(source);
+          }
+        }
+      }
+    }
+    const scissor = (
+      bounds: import("../board/model").Bounds,
+    ): readonly [number, number, number, number] => {
+      const sx = (frameRenderer.camera.scale * width) / canvasBounds.width,
+        sy = (frameRenderer.camera.scale * height) / canvasBounds.height;
+      const x1 =
+          width / 2 +
+          (bounds.minX - viewCenterX) *
+            sx *
+            frameRenderer.camera.horizontalSign,
+        x2 =
+          width / 2 +
+          (bounds.maxX - viewCenterX) *
+            sx *
+            frameRenderer.camera.horizontalSign;
+      const left = Math.max(
+          0,
+          Math.min(width, Math.floor(Math.min(x1, x2) - 2)),
+        ),
+        right = Math.max(
+          left,
+          Math.min(width, Math.ceil(Math.max(x1, x2) + 2)),
+        ),
+        top = Math.max(
+          0,
+          Math.min(
+            height,
+            Math.floor(height / 2 - (bounds.maxY - viewCenterY) * sy - 2),
+          ),
+        ),
+        bottom = Math.max(
+          top,
+          Math.min(
+            height,
+            Math.ceil(height / 2 - (bounds.minY - viewCenterY) * sy + 2),
+          ),
+        );
+      return [left, top, right - left, bottom - top];
+    };
     const encoder = frameRenderer.resources.device.createCommandEncoder(),
       pass = encoder.beginRenderPass({
         colorAttachments: [
@@ -179,7 +288,32 @@ export class WebGPUFrame implements IDisposable {
       if (batch.indexBuffer) {
         pass.setIndexBuffer(batch.indexBuffer, "uint32");
         pass.drawIndexed(count, 1, start);
+      } else if (batch.spatialIndex) {
+        batch.spatialIndex.visible(
+          localView,
+          (first, length) => pass.draw(length, 1, first),
+          start,
+          count,
+        );
       } else pass.draw(count, 1, start);
+    }
+    function ordinary(
+      batch: GpuBatch,
+      pipeline: GPURenderPipeline,
+      bind: GPUBindGroup,
+      cache = true,
+    ) {
+      const ranges: number[] = [];
+      const first = batch.triangles ? 0 : (batch.firstInstance ?? 0);
+      if (batch.spatialIndex && !batch.indexBuffer)
+        batch.spatialIndex.visible(
+          localView,
+          (start, count) => ranges.push(start, count),
+          first,
+          batch.count,
+        );
+      else ranges.push(first, batch.count);
+      frameRenderer.bundles.draw(pass, batch, pipeline, bind, ranges, cache);
     }
     function copper(batch: GpuBatch, fill: GPUBindGroup, annotate = false) {
       if (batch.bounds && !ViewCulling.overlaps(batch.bounds, view)) return;
@@ -209,22 +343,15 @@ export class WebGPUFrame implements IDisposable {
           )
         ) {
           flushSolid();
-          const origin: Point = state.scene
-            ? [
-                (state.scene.bounds.minX + state.scene.bounds.maxX) / 2,
-                (state.scene.bounds.minY + state.scene.bounds.maxY) / 2,
-              ]
-            : [0, 0];
           frameRenderer.resources.curveFills.draw(
             pass,
             source,
-            view,
-            origin,
-            frameRenderer.camera.scale,
-            devicePixelRatio,
             batch.colorBuffer,
             frameRenderer.resources.polygonBind,
             fill,
+            scissor,
+            width,
+            height,
             annotate
               ? () =>
                   frameRenderer.resources.labels.draw(
@@ -300,77 +427,63 @@ export class WebGPUFrame implements IDisposable {
             frameRenderer.resources.labels.draw(pass, "drill");
         }
       };
-      if (!BoardDisplay.isBatchVisible(state.display, batch)) {
+      if (
+        !batch.owner.alive ||
+        !BoardDisplay.isBatchVisible(state.display, batch)
+      ) {
         annotations();
         continue;
       }
       if (batch.category === "zone")
         copper(batch, frameRenderer.resources.zoneBind, true);
-      else if (batch.triangles) {
-        pass.setPipeline(frameRenderer.resources.polygonPipeline);
-        pass.setBindGroup(0, frameRenderer.resources.polygonBind);
-        polygon(batch);
-      } else {
-        pass.setPipeline(
-          batch.arcs
-            ? frameRenderer.resources.arcPipeline
-            : frameRenderer.resources.pipeline,
-        );
-        pass.setBindGroup(
-          0,
-          batch.category === "zone-outline"
-            ? batch.arcs
-              ? frameRenderer.resources.zoneBind
-              : frameRenderer.resources.zoneOutlineBind
+      else
+        ordinary(
+          batch,
+          batch.triangles
+            ? frameRenderer.resources.polygonPipeline
             : batch.arcs
-              ? frameRenderer.resources.polygonBind
-              : frameRenderer.resources.bind,
+              ? frameRenderer.resources.arcPipeline
+              : frameRenderer.resources.pipeline,
+          batch.triangles
+            ? frameRenderer.resources.polygonBind
+            : batch.category === "zone-outline"
+              ? batch.arcs
+                ? frameRenderer.resources.zoneBind
+                : frameRenderer.resources.zoneOutlineBind
+              : batch.arcs
+                ? frameRenderer.resources.polygonBind
+                : frameRenderer.resources.bind,
         );
-        pass.setVertexBuffer(0, batch.buffer);
-        pass.setVertexBuffer(1, batch.residualBuffer);
-        pass.draw(6, batch.count);
-      }
       annotations();
     }
     function overlay(values: GpuBatch[], hovering: boolean) {
       if (state.display.opacity <= 0) return;
       for (const batch of values) {
         if (
+          !batch.owner.alive ||
           !BoardDisplay.isBatchVisible(state.display, batch, true) ||
           (batch.category === "zone" && (hovering || state.display.shapes <= 0))
         )
           continue;
         if (batch.category === "zone")
           copper(batch, frameRenderer.resources.selectionPolygonBind);
-        else if (batch.triangles) {
-          pass.setPipeline(frameRenderer.resources.polygonPipeline);
-          pass.setBindGroup(
-            0,
-            hovering
-              ? frameRenderer.resources.hoverPolygonBind
-              : frameRenderer.resources.selectionPolygonBind,
-          );
-          polygon(batch);
-        } else {
-          pass.setPipeline(
-            batch.arcs
-              ? frameRenderer.resources.arcPipeline
-              : frameRenderer.resources.pipeline,
-          );
-          pass.setBindGroup(
-            0,
-            batch.arcs
+        else
+          ordinary(
+            batch,
+            batch.triangles
+              ? frameRenderer.resources.polygonPipeline
+              : batch.arcs
+                ? frameRenderer.resources.arcPipeline
+                : frameRenderer.resources.pipeline,
+            batch.triangles || batch.arcs
               ? hovering
                 ? frameRenderer.resources.hoverPolygonBind
                 : frameRenderer.resources.selectionPolygonBind
               : hovering
                 ? frameRenderer.resources.hoverBind
                 : frameRenderer.resources.selectionBind,
+            false,
           );
-          pass.setVertexBuffer(0, batch.buffer);
-          pass.setVertexBuffer(1, batch.residualBuffer);
-          pass.draw(6, batch.count, 0, batch.firstInstance ?? 0);
-        }
       }
     }
     overlay(state.selectionBatches, false);
@@ -387,6 +500,8 @@ export class WebGPUFrame implements IDisposable {
   }
 
   dispose() {
+    this.bundles.dispose();
+    this.labelLayout.clear();
     this.stencil?.destroy();
     this.stencil = null;
   }

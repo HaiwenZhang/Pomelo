@@ -16,3 +16,20 @@ export function copperColor(
   if (mode === "layer" || !Number.isInteger(net) || net <= 0) return layerColor;
   return netColors[net % netColors.length];
 }
+
+/** Dynamic copper keeps net RGB and packs its layer RGB into the otherwise
+ * constant alpha lane. All 24-bit RGB values plus one are exact float32 integers.
+ * Negative alpha distinguishes material data from ordinary RGBA (text/drills).
+ * The vertex shader restores alpha=1 before interpolation/blending. */
+export function copperMaterial(
+  layerColor: number[],
+  net: number,
+  mode: ColorMode | "dynamic",
+): number[] {
+  if (mode !== "dynamic") return [...copperColor(layerColor, net, mode), 1];
+  const packed =
+    (Math.round(layerColor[0] * 255) << 16) |
+    (Math.round(layerColor[1] * 255) << 8) |
+    Math.round(layerColor[2] * 255);
+  return [...copperColor(layerColor, net, "net"), -(packed + 1)];
+}

@@ -46,7 +46,7 @@ fn tangent(point: vec4f, center: vec4f) -> vec4f {
 
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @location(0) circle: vec4f, @location(1) ends: vec4f, @location(2) bounds: vec4f, @location(3) color: vec4f, @location(4) flags: vec4f, @location(5) circleLow: vec4f, @location(6) endsLow: vec4f, @location(7) boundsLow: vec4f) -> Out {
-  let corners = array<vec2f, 6>(vec2f(0, 0), vec2f(1, 0), vec2f(0, 1), vec2f(0, 1), vec2f(1, 0), vec2f(1, 1));
+  let corners = array<vec2f, 4>(vec2f(0, 0), vec2f(1, 0), vec2f(0, 1), vec2f(1, 1));
   let aa = 2.0 / view.camera.z;
   let limit = view.viewport.xy * .5 / view.camera.z;
   // Clamp before rasterization: deep zoom may put most of the arc far outside
@@ -63,7 +63,7 @@ fn vs(@builtin(vertex_index) vi: u32, @location(0) circle: vec4f, @location(1) e
   out.ta = tangent(out.a, out.center);
   out.tb = tangent(out.b, out.center);
   out.flags = flags;
-  out.color = color;
+  out.color = materialColor(color);
   return out;
 }
 

@@ -1,25 +1,23 @@
+import { LatestTask, type TaskTicket } from "./latest-task";
+import { OverlayController } from "./overlay-controller";
+import { GpuScene } from "./gpu-scene";
+import { ScenePreparation } from "./scene-preparation";
 import { BoardDisplay } from "../board/display";
 import type { BoardScene, Bounds, Point, Zone } from "../board/model";
 /// <reference types="@webgpu/types" />
 
 import { type DisplayOptions } from "../board/display";
 import type { SearchItem } from "../board/search";
-import { cooperative } from "../cooperative";
 import { Disposables } from "../disposable";
 import { Camera, type ViewportInsets } from "../interaction/camera";
 import { canvasBoardPoint } from "../interaction/cursor-coordinate";
 import { hoverDetails } from "../interaction/hover-details";
 import {
-  BoardIndex,
-  selectionScene,
-  selectionSceneSteps,
-  type BoardObject,
   type PickFilter,
   type PickHit,
   type Selection,
   type SelectionMode,
 } from "../interaction/picking";
-import { AreaLabelIndex } from "./area-label-index";
 import type { ColorMode } from "./color-mode";
 import {
   Renderer,
@@ -28,10 +26,6 @@ import {
   type ViewState,
   type SelectionTaskState,
 } from "./renderer";
-import { StrokeFont } from "../text/stroke-font";
-import { TrackLabelIndex } from "./track-label-index";
-import { ViaLabelIndex } from "./via-label-index";
-import { WebGPUBatchUploader, type GpuBatch } from "./webgpu-batch-uploader";
 import { WebGPUFrame } from "./webgpu-frame";
 import { WebGPUResources } from "./webgpu-resources";
 
@@ -39,10 +33,32 @@ const TOOLTIP_DELAY = 350;
 
 export class WebGPURenderer extends Renderer {
   private readonly disposables = new Disposables();
-  private readonly uploader: WebGPUBatchUploader;
+  private readonly preparation: ScenePreparation;
+  private readonly overlay: OverlayController;
+  private gpuScene: GpuScene | null = null;
+  private get index() {
+    return this.gpuScene?.index ?? null;
+  }
+  private get viaLabelIndex() {
+    return this.gpuScene?.viaLabelIndex ?? null;
+  }
+  private get trackLabelIndex() {
+    return this.gpuScene?.trackLabelIndex ?? null;
+  }
+  private get areaLabelIndex() {
+    return this.gpuScene?.areaLabelIndex ?? null;
+  }
+  private get zoneById() {
+    return this.gpuScene?.zoneById ?? new Map<number, Zone>();
+  }
+  private get batches() {
+    return this.gpuScene?.batches ?? [];
+  }
   private readonly frameRenderer: WebGPUFrame;
   private animationFrame = 0;
-  private scene: BoardScene | null = null;
+  private get scene() {
+    return this.gpuScene?.source ?? null;
+  }
   private display = BoardDisplay.createDisplayOptions();
   private colorMode: ColorMode = "net";
   private readonly camera = new Camera();
@@ -94,30 +110,14 @@ export class WebGPURenderer extends Renderer {
   setViewportInsets(insets: ViewportInsets) {
     this.insets = insets;
   }
-  private zoneById = new Map<number, Zone>();
-  private batches: GpuBatch[] = [];
-  private selectionBatches: GpuBatch[] = [];
-  private hoverBatches: GpuBatch[] = [];
-  private index: BoardIndex | null = null;
-  private selection: Selection | null = null;
-  private hover: PickHit | null = null;
-  private viaLabelIndex: ViaLabelIndex | null = null;
-  private trackLabelIndex: TrackLabelIndex | null = null;
-  private areaLabelIndex: AreaLabelIndex | null = null;
-  private hoverMembers: BoardObject[] | null = null;
-  private pendingHover: AbortController | null = null;
-  private pendingScene: AbortController | null = null;
-  private pendingColor: AbortController | null = null;
-  private pendingSelection: {
-    controller: AbortController;
-    requested: Selection | null;
-  } | null = null;
+  private readonly sceneTasks = new LatestTask();
+  private readonly tooltipTasks = new LatestTask();
   private interaction: { filter: PickFilter; mode: SelectionMode } = {
     filter: "all",
     mode: "object",
   };
   private tooltipTimer: ReturnType<typeof setTimeout> | undefined;
-  private tooltipJob: AbortController | null = null;
+  private tooltipJob: TaskTicket | null = null;
   private pointer: {
     id: number;
     x: number;
@@ -232,15 +232,26 @@ export class WebGPURenderer extends Renderer {
 
   private constructor(private readonly resources: WebGPUResources) {
     super(resources.canvas);
-    this.uploader = new WebGPUBatchUploader(resources.device);
+    this.preparation = new ScenePreparation(
+      resources.device,
+      resources.labels.font,
+    );
     this.frameRenderer = new WebGPUFrame(resources, this.camera);
+    this.overlay = new OverlayController(resources, {
+      scene: () => this.gpuScene,
+      display: () => this.display,
+      mode: () => this.interaction.mode,
+      invalidate: () => this.invalidate(),
+      focusBounds: (bounds, source) => this.focusBounds(bounds, source),
+    });
     this.disposables.add(this.frameRenderer);
-    this.disposables.add(this.uploader);
     this.disposables.add(resources);
     const { canvas, device, onError } = resources;
     device.lost.then((info) => {
-      if (!this.disposed)
+      if (!this.disposed) {
+        this.dispose();
         onError(`图形设备中断：${info.message || info.reason}`);
+      }
     });
     device.addEventListener("uncapturederror", (e) => onError(e.error.message));
     canvas.addEventListener("wheel", this.wheel, { passive: false });
@@ -286,7 +297,7 @@ export class WebGPURenderer extends Renderer {
   private hideTooltip() {
     clearTimeout(this.tooltipTimer);
     this.tooltipTimer = undefined;
-    this.tooltipJob?.abort();
+    this.tooltipTasks.cancel();
     this.tooltipJob = null;
     this.setTooltip(null);
   }
@@ -297,7 +308,7 @@ export class WebGPURenderer extends Renderer {
     const source = this.scene,
       sourceIndex = this.index,
       mode = this.interaction.mode,
-      job = new AbortController();
+      job = this.tooltipTasks.start();
     this.tooltipJob = job;
     this.tooltipTimer = setTimeout(async () => {
       this.tooltipTimer = undefined;
@@ -324,244 +335,23 @@ export class WebGPURenderer extends Renderer {
             error instanceof Error ? error.message : String(error),
           );
         }
+      } finally {
+        job.finish();
       }
     }, TOOLTIP_DELAY);
   }
 
-  private clearSelected() {
-    this.pendingSelection?.controller.abort();
-    this.pendingSelection = null;
-    this.selection = null;
-    this.uploader.destroy(this.selectionBatches);
-    this.selectionBatches = [];
-    this.resources.onSelection?.(null);
-    this.resources.onSelectionTask?.(null);
-    this.invalidate();
-  }
-
-  private async collect<T>(
-    steps: Generator<void, T>,
-    signal: AbortSignal,
-  ): Promise<T> {
-    const checkpoint = cooperative(signal, 6, 16);
-    try {
-      while (true) {
-        signal.throwIfAborted();
-        const step = steps.next();
-        if (step.done) return step.value;
-        const pause = checkpoint();
-        if (pause) await pause;
-      }
-    } finally {
-      steps.return(undefined as T);
-    }
-  }
-
-  private startSelection(
-    value: Selection | null,
-    lookup?: Generator<
-      void,
-      { selection: Selection | null; bounds: Bounds | null }
-    >,
-  ) {
-    this.clearSelected();
-    if (!this.scene || (!value && !lookup)) return Promise.resolve();
-    const source = this.scene,
-      job = { controller: new AbortController(), requested: value };
-    this.pendingSelection = job;
-    const signal = job.controller.signal;
-    this.resources.onSelectionTask?.({
-      phase: lookup ? "查找对象" : "准备选择",
-    });
-    return (async () => {
-      let owned: GpuBatch[] = [];
-      try {
-        // Let the sidebar paint its cancellation control before expensive work.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        signal.throwIfAborted();
-        if (lookup) {
-          const found = await this.collect(lookup, signal);
-          value = found.selection;
-          job.requested = value;
-          if (found.bounds) this.focusBounds(found.bounds, source);
-        }
-        if (!value) return;
-        const selectedScene = await this.collect(
-          selectionSceneSteps(source, value.objects),
-          signal,
-        );
-        this.resources.onSelectionTask?.({ phase: "上传选择高亮" });
-        owned = await this.uploader.uploadAsync(selectedScene, signal, {
-          kind: "selection",
-        });
-        signal.throwIfAborted();
-        this.selectionBatches = owned;
-        owned = [];
-        this.selection = value;
-        this.resources.onSelection?.(value);
-        this.invalidate();
-        this.resources.onSelectionTask?.({ phase: "显示选择" });
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => resolve()),
-        );
-        signal.throwIfAborted();
-        await this.resources.device.queue.onSubmittedWorkDone();
-        signal.throwIfAborted();
-      } catch (error) {
-        this.uploader.destroy(owned);
-        if (!signal.aborted && this.pendingSelection === job) {
-          this.clearSelected();
-          const message =
-            error instanceof Error ? error.message : String(error);
-          if (this.resources.onSelectionTask)
-            this.resources.onSelectionTask({
-              phase: "选择失败",
-              error: message,
-            });
-          else this.resources.onError(message);
-        }
-      } finally {
-        lookup?.return({ selection: null, bounds: null });
-        if (this.pendingSelection === job) {
-          this.pendingSelection = null;
-          this.resources.onSelectionTask?.(null);
-        }
-      }
-    })();
-  }
-
-  private select(hit: PickHit | null) {
-    return this.startSelection(
-      hit && this.index ? this.index.select(hit, this.interaction.mode) : null,
-    );
-  }
-
-  private async prepareGroupHover(
-    source: BoardScene,
-    objects: BoardObject[],
-    job: AbortController,
-  ) {
-    const renderer = this;
-    let owned: GpuBatch[] = [];
-    const visibility = renderer.display;
-    try {
-      // Yield out of the pointer handler before walking a large network.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      job.signal.throwIfAborted();
-      const subset = await renderer.collect(
-        selectionSceneSteps(source, objects),
-        job.signal,
-      );
-      const zones = subset.zones;
-      subset.zones = [];
-      // Hover only needs copper edges. Reuse their exact existing instances,
-      // avoiding both the fill upload and reconstruction of giant void lists.
-      const outlines = await renderer.collect(
-        (function* () {
-          const result: GpuBatch[] = [];
-          for (let i = 0; i < zones.length; i++) {
-            if ((i & 63) === 0) yield;
-            for (const {
-              batch,
-              start,
-              count,
-            } of renderer.uploader.zoneOutlines.get(zones[i].id) ?? [])
-              if (BoardDisplay.isBatchVisible(visibility, batch, true))
-                result.push({
-                  ...batch,
-                  firstInstance: start,
-                  count,
-                  borrowed: true,
-                });
-          }
-          return result;
-        })(),
-        job.signal,
-      );
-      owned = await renderer.uploader.uploadAsync(subset, job.signal, {
-        kind: "selection",
-        visibility,
-      });
-      job.signal.throwIfAborted();
-      if (
-        renderer.disposed ||
-        renderer.scene !== source ||
-        renderer.pendingHover !== job
-      )
-        return;
-      renderer.hoverBatches = BoardDisplay.orderBatches(
-        [...outlines, ...owned],
-        renderer.display,
-      );
-      owned = [];
-      renderer.invalidate();
-    } catch (error) {
-      if (
-        !job.signal.aborted &&
-        !renderer.disposed &&
-        renderer.pendingHover === job
-      )
-        renderer.resources.onError(
-          error instanceof Error ? error.message : String(error),
-        );
-    } finally {
-      renderer.uploader.destroy(owned);
-      if (renderer.pendingHover === job) renderer.pendingHover = null;
-    }
-  }
-
   private setHover(hit: PickHit | null) {
     if (!hit) this.hideTooltip();
-    if (
-      hit?.object === this.hover?.object &&
-      hit?.layer === this.hover?.layer &&
-      hit?.category === this.hover?.category
-    )
-      return;
-    this.hover = hit;
-    const group =
-      hit && this.index && this.interaction.mode !== "object"
-        ? this.index.select(hit, this.interaction.mode)
-        : null;
-    const members = group && group.mode !== "object" ? group.objects : null;
+    this.overlay.setHover(hit);
     this.resources.canvas.style.cursor = hit
       ? "pointer"
       : this.navigationTool === "pan"
         ? "grab"
         : "default";
-    // Index-owned arrays are stable. Crossing members of the same net must not
-    // restart its preparation, upload again or repaint an unchanged overlay.
-    if (members && members === this.hoverMembers) return;
-    this.pendingHover?.abort();
-    this.pendingHover = null;
-    this.hoverMembers = members;
-    this.uploader.destroy(this.hoverBatches);
-    this.hoverBatches = [];
-    if (members && this.scene) {
-      const job = new AbortController();
-      this.pendingHover = job;
-      void this.prepareGroupHover(this.scene, members, job);
-      this.invalidate();
-      return;
-    }
-    // Base outlines already contain the exact high/low line and arc instances.
-    // Borrow only this zone's ranges; no geometry conversion or GPU allocation.
-    this.hoverBatches =
-      hit?.object.kind === "zone"
-        ? (this.uploader.zoneOutlines.get(hit.object.value.id) ?? []).map(
-            ({ batch, start, count }) => ({
-              ...batch,
-              firstInstance: start,
-              count,
-              borrowed: true,
-            }),
-          )
-        : hit && this.scene
-          ? this.uploader.upload(selectionScene(this.scene, [hit.object]), {
-              kind: "selection",
-            })
-          : [];
-    this.invalidate();
+  }
+  private select(hit: PickHit | null) {
+    return this.overlay.select(hit);
   }
 
   private draw() {
@@ -577,13 +367,14 @@ export class WebGPURenderer extends Renderer {
     }
     this.frameRenderer.draw({
       scene: this.scene,
+      colorMode: this.colorMode,
       display: this.display,
       batches: this.batches,
-      selectionBatches: this.selectionBatches,
-      hoverBatches: this.hoverBatches,
-      hover: this.hover,
-      hoverMembers: this.hoverMembers,
-      selection: this.selection,
+      selectionBatches: this.overlay.selectionBatches,
+      hoverBatches: this.overlay.hoverBatches,
+      hover: this.overlay.hover,
+      hoverMembers: this.overlay.hoverMembers,
+      selection: this.overlay.selection,
       viaLabelIndex: this.viaLabelIndex,
       trackLabelIndex: this.trackLabelIndex,
       areaLabelIndex: this.areaLabelIndex,
@@ -667,53 +458,27 @@ export class WebGPURenderer extends Renderer {
   }
 
   private clearScene() {
-    this.pendingColor?.abort();
-    this.pendingColor = null;
-    this.clearSelected();
+    this.overlay.clearSelected();
     this.setHover(null);
     this.cancel();
-    this.uploader.destroy(this.batches);
-    this.batches = [];
-    this.uploader.zoneBatches.clear();
-    this.uploader.zoneOutlines.clear();
+    this.gpuScene?.dispose();
+    this.gpuScene = null;
     this.resources.labels.clear();
+    this.frameRenderer.labelLayout.clear();
     this.resources.curveFills.clear();
-    this.zoneById.clear();
-    this.scene = null;
-    this.index = null;
-    this.viaLabelIndex = null;
-    this.trackLabelIndex = null;
-    this.areaLabelIndex = null;
     this.invalidate();
   }
 
+  private attachScene(value: GpuScene) {
+    this.gpuScene = value;
+    value.order(this.display);
+    this.fit();
+  }
+
   setScene(value: BoardScene | null) {
-    this.pendingScene?.abort();
-    this.pendingScene = null;
+    this.sceneTasks.cancel();
     this.clearScene();
-    if (value) {
-      const nextIndex = new BoardIndex(value),
-        nextLabels = new ViaLabelIndex(value.vias),
-        nextTracks = new TrackLabelIndex(
-          value.segments,
-          value.nets,
-          this.resources.labels.font,
-        ),
-        nextAreas = new AreaLabelIndex(value, this.resources.labels.font),
-        nextBatches = this.uploader.upload(value, {
-          kind: "scene",
-          colorMode: this.colorMode,
-        });
-      this.scene = value;
-      this.viaLabelIndex = nextLabels;
-      this.trackLabelIndex = nextTracks;
-      this.areaLabelIndex = nextAreas;
-      this.zoneById = new Map(value.zones.map((z) => [z.id, z]));
-      this.index = nextIndex;
-      this.batches = BoardDisplay.orderBatches(nextBatches, this.display);
-      this.uploader.indexZoneBatches(this.batches);
-      this.fit();
-    }
+    if (value) this.attachScene(this.preparation.create(value));
   }
 
   async prepareScene(
@@ -723,71 +488,33 @@ export class WebGPURenderer extends Renderer {
   ) {
     signal.throwIfAborted();
     if (this.disposed) throw new Error("渲染器已关闭");
-    this.pendingScene?.abort();
+    this.sceneTasks.cancel();
     this.clearScene();
-    const controller = new AbortController();
-    this.pendingScene = controller;
-    const abort = () => controller.abort();
-    signal.addEventListener("abort", abort, { once: true });
+    const task = this.sceneTasks.start(signal),
+      controller = task.controller;
+    let prepared: GpuScene | null = null;
     try {
-      progress?.("读取原始文字字形");
-      await StrokeFont.prepare(value.texts ?? [], controller.signal);
-      progress?.("构建拾取索引");
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const nextIndex = await BoardIndex.create(value, controller.signal);
-      progress?.("构建过孔标注索引");
-      const nextLabels = await ViaLabelIndex.create(
-        value.vias,
-        controller.signal,
-      );
-      progress?.("构建走线标注索引");
-      const nextTracks = await TrackLabelIndex.create(
-        value.segments,
-        value.nets,
-        this.resources.labels.font,
-        controller.signal,
-      );
-      progress?.("构建焊盘与铜皮标注索引");
-      const nextAreas = await AreaLabelIndex.create(
-        value,
-        this.resources.labels.font,
-        controller.signal,
-      );
-      progress?.("上传板图");
-      const nextBatches = await this.uploader.uploadAsync(
+      prepared = await this.preparation.prepare(
         value,
         controller.signal,
-        {
-          kind: "scene",
-          colorMode: this.colorMode,
-        },
+        progress,
       );
-      if (controller.signal.aborted) {
-        this.uploader.destroy(nextBatches);
-        controller.signal.throwIfAborted();
-      }
-      this.scene = value;
-      this.viaLabelIndex = nextLabels;
-      this.trackLabelIndex = nextTracks;
-      this.areaLabelIndex = nextAreas;
-      this.zoneById = new Map(value.zones.map((z) => [z.id, z]));
-      this.index = nextIndex;
-      this.batches = BoardDisplay.orderBatches(nextBatches, this.display);
-      this.uploader.indexZoneBatches(this.batches);
-      this.fit();
+      task.assertCurrent();
+      this.attachScene(prepared);
+      prepared = null;
       progress?.("等待首帧");
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => resolve()),
       );
-      controller.signal.throwIfAborted();
+      task.assertCurrent();
       await this.resources.device.queue.onSubmittedWorkDone();
-      controller.signal.throwIfAborted();
+      task.assertCurrent();
     } catch (error) {
-      if (this.pendingScene === controller) this.clearScene();
+      prepared?.dispose();
+      if (task.isCurrent) this.clearScene();
       throw error;
     } finally {
-      signal.removeEventListener("abort", abort);
-      if (this.pendingScene === controller) this.pendingScene = null;
+      task.finish();
     }
   }
 
@@ -796,7 +523,7 @@ export class WebGPURenderer extends Renderer {
       value.activeLayer !== this.display.activeLayer ||
       value.priorities !== this.display.priorities
     )
-      this.batches = BoardDisplay.orderBatches(this.batches, value);
+      this.gpuScene?.order(value);
     this.display = value;
     this.setHover(null);
     this.invalidate();
@@ -805,51 +532,19 @@ export class WebGPURenderer extends Renderer {
   setColorMode(mode: ColorMode) {
     if (this.colorMode === mode) return;
     this.colorMode = mode;
-    this.pendingColor?.abort();
-    this.pendingColor = null;
-    const source = this.scene;
-    if (!source) return;
-    const job = new AbortController();
-    this.pendingColor = job;
-    void (async () => {
-      let next: GpuBatch[] = [];
-      try {
-        next = await this.uploader.uploadAsync(source, job.signal, {
-          kind: "scene",
-          colorMode: mode,
-        });
-        job.signal.throwIfAborted();
-        if (this.scene !== source || this.disposed) return;
-        const selected = this.selection;
-        this.clearSelected();
-        this.setHover(null);
-        this.uploader.destroy(this.batches);
-        this.batches = BoardDisplay.orderBatches(next, this.display);
-        next = [];
-        this.uploader.indexZoneBatches(this.batches);
-        this.invalidate();
-        if (selected) void this.startSelection(selected);
-      } catch (error) {
-        if (!job.signal.aborted && this.pendingColor === job)
-          this.resources.onError(
-            error instanceof Error ? error.message : String(error),
-          );
-      } finally {
-        this.uploader.destroy(next);
-        if (this.pendingColor === job) this.pendingColor = null;
-      }
-    })();
+    this.invalidate();
   }
 
   setInteraction(value: { filter: PickFilter; mode: SelectionMode }) {
     const changed = value.mode !== this.interaction.mode,
       anchor =
-        this.pendingSelection?.requested?.anchor ?? this.selection?.anchor;
+        this.overlay.pendingSelection?.requested?.anchor ??
+        this.overlay.selection?.anchor;
     this.interaction = value;
     this.setHover(null);
     if (changed) {
       if (anchor) this.select(anchor);
-      else if (this.pendingSelection) this.clearSelected();
+      else if (this.overlay.pendingSelection) this.overlay.clearSelected();
     }
   }
 
@@ -873,32 +568,20 @@ export class WebGPURenderer extends Renderer {
       first = lookup.next();
     if (first.done) {
       if (first.value.bounds) this.focusBounds(first.value.bounds, this.scene);
-      return this.startSelection(first.value.selection);
+      return this.overlay.startSelection(first.value.selection);
     }
-    return this.startSelection(null, lookup);
+    return this.overlay.startSelection(null, lookup);
   }
 
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
     this.viewListeners.clear();
-    this.pendingHover?.abort();
-    this.pendingHover = null;
-    this.hoverMembers = null;
+    this.overlay.dispose();
     this.hideTooltip();
     this.tooltipListeners.clear();
     window.removeEventListener("blur", this.blur);
-    this.pendingSelection?.controller.abort();
-    this.pendingSelection = null;
-    this.pendingScene?.abort();
-    this.pendingScene = null;
-    this.uploader.zoneBatches.clear();
-    this.uploader.zoneOutlines.clear();
-    this.scene = null;
-    this.index = null;
-    this.viaLabelIndex = null;
-    this.trackLabelIndex = null;
-    this.areaLabelIndex = null;
+    this.sceneTasks.cancel();
     cancelAnimationFrame(this.animationFrame);
     this.observer.disconnect();
     this.resources.canvas.removeEventListener("wheel", this.wheel);
@@ -912,10 +595,10 @@ export class WebGPURenderer extends Renderer {
     );
     this.resources.canvas.removeEventListener("pointerleave", this.leave);
     window.removeEventListener("keydown", this.key);
-    this.uploader.destroy(this.batches);
-    this.uploader.destroy(this.selectionBatches);
-    this.uploader.destroy(this.hoverBatches);
-    this.zoneById.clear();
+    this.sceneTasks.dispose();
+    this.tooltipTasks.dispose();
+    this.gpuScene?.dispose();
+    this.gpuScene = null;
     this.disposables.dispose();
   }
 }

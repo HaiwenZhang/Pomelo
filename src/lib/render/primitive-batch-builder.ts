@@ -14,7 +14,7 @@ import { PositionPrecision } from "./position-precision";
 import type { PrimitiveBatch } from "./primitive-batch";
 
 import { ArcBatchBuilder } from "./arc-batch-builder";
-import { copperColor, type ColorMode } from "./color-mode";
+import { copperMaterial, type ColorMode } from "./color-mode";
 import { CopperBatchPacker } from "./copper-batch-packer";
 import { SelectionPacketBuilder } from "./selection-packet-builder";
 
@@ -26,15 +26,30 @@ export type PrimitiveBuildOptions =
 
 /** Builds one scene's GPU-ready packets without retaining expanded geometry. */
 export class PrimitiveBatchBuilder {
+  private readonly materials = new WeakMap<number[], Map<number, number[]>>();
   private readonly originX: number;
   private readonly originY: number;
 
   constructor(
     private readonly scene: BoardScene,
-    private readonly colorMode: ColorMode = "layer",
+    private readonly colorMode: ColorMode | "dynamic" = "layer",
   ) {
     this.originX = (scene.bounds.minX + scene.bounds.maxX) / 2;
     this.originY = (scene.bounds.minY + scene.bounds.maxY) / 2;
+  }
+
+  private material(color: number[], net: number): number[] {
+    let colors = this.materials.get(color);
+    if (!colors) {
+      colors = new Map();
+      this.materials.set(color, colors);
+    }
+    let value = colors.get(net);
+    if (!value) {
+      value = copperMaterial(color, net, this.colorMode);
+      colors.set(net, value);
+    }
+    return value;
   }
 
   private appendSegment(
@@ -54,8 +69,10 @@ export class PrimitiveBatchBuilder {
         segment.arc.sweep,
         1,
         0,
-        ...color,
-        1,
+        color[0],
+        color[1],
+        color[2],
+        color[3] ?? 1,
       );
     } else {
       target.push(
@@ -67,8 +84,10 @@ export class PrimitiveBatchBuilder {
         0,
         0,
         0,
-        ...color,
-        1,
+        color[0],
+        color[1],
+        color[2],
+        color[3] ?? 1,
       );
     }
   }
@@ -84,7 +103,20 @@ export class PrimitiveBatchBuilder {
     const y = owner.at[1] + pad.offset[1] - this.originY;
     const angle = owner.angle ?? 0;
     if (pad.type === 2)
-      target.push(x, y, pad.width / 2, 0, 0, 0, hole ? 3 : 2, 0, ...color, 1);
+      target.push(
+        x,
+        y,
+        pad.width / 2,
+        0,
+        0,
+        0,
+        hole ? 3 : 2,
+        0,
+        color[0],
+        color[1],
+        color[2],
+        color[3] ?? 1,
+      );
     else if (pad.type === 25)
       target.push(
         x,
@@ -95,8 +127,10 @@ export class PrimitiveBatchBuilder {
         0,
         7,
         0,
-        ...color,
-        1,
+        color[0],
+        color[1],
+        color[2],
+        color[3] ?? 1,
       );
     else if ([3, 5, 6, 11, 12, 27, 28].includes(pad.type))
       target.push(
@@ -108,8 +142,10 @@ export class PrimitiveBatchBuilder {
         new PadShapeGeometry(pad).corner(),
         hole ? 6 : [3, 28].includes(pad.type) ? 5 : 4,
         0,
-        ...color,
-        1,
+        color[0],
+        color[1],
+        color[2],
+        color[3] ?? 1,
       );
   }
 
@@ -127,7 +163,14 @@ export class PrimitiveBatchBuilder {
         [mesh.points[index * 2], mesh.points[index * 2 + 1]],
         owner,
       );
-      fill.push(point[0] - this.originX, point[1] - this.originY, ...color, 1);
+      fill.push(
+        point[0] - this.originX,
+        point[1] - this.originY,
+        color[0],
+        color[1],
+        color[2],
+        color[3] ?? 1,
+      );
     }
     for (const edge of shape.edges(owner))
       this.appendSegment(edges, edge, color, true);
@@ -171,7 +214,7 @@ export class PrimitiveBatchBuilder {
     let work = 0;
     const layers = new BoardLayers(scene).all();
     const members =
-      !zoneFills && layers.length > 1
+      layers.length > 1
         ? yield* SelectionLayerCollector.collectSteps(scene)
         : undefined;
     const originX = this.originX,
@@ -251,10 +294,7 @@ export class PrimitiveBatchBuilder {
                 data,
                 residual,
                 indices: zone.indices,
-                color: new Float32Array([
-                  ...copperColor(color, zone.net, this.colorMode),
-                  1,
-                ]),
+                color: new Float32Array([...this.material(color, zone.net)]),
                 bounds: new ZoneShape(zone).bounds(),
                 holeChunks: zone.holeChunks,
               };
@@ -277,7 +317,7 @@ export class PrimitiveBatchBuilder {
                     this.appendSegment(
                       edges,
                       segment,
-                      copperColor(color, zone.net, this.colorMode),
+                      this.material(color, zone.net),
                       true,
                     );
                     if (segment.arc) outlineArcs++;
@@ -307,8 +347,7 @@ export class PrimitiveBatchBuilder {
                       0,
                       0,
                       0,
-                      ...copperColor(color, zone.net, this.colorMode),
-                      1,
+                      ...this.material(color, zone.net),
                     );
                     outlineLines++;
                     if ((++work & 2047) === 0) yield;
@@ -335,7 +374,7 @@ export class PrimitiveBatchBuilder {
           if ((++work & 511) === 0) yield;
           for (const pad of pin.shapes)
             if (pad.layer === layer.id) {
-              const padColor = copperColor(color, pin.net, this.colorMode);
+              const padColor = this.material(color, pin.net);
               if (pad.custom?.length)
                 this.appendCustomPad(custom, customEdges, pad, pin, padColor);
               else this.appendPad(pins, pad, pin, padColor);
@@ -353,7 +392,7 @@ export class PrimitiveBatchBuilder {
             this.appendSegment(
               lines,
               segment,
-              copperColor(color, segment.net, this.colorMode),
+              this.material(color, segment.net),
             );
         }
       if (!visibility || BoardDisplay.isVisible(visibility, layer.id, "via"))
@@ -363,7 +402,7 @@ export class PrimitiveBatchBuilder {
           if ((++work & 511) === 0) yield;
           for (const pad of via.pads)
             if (pad.layer === layer.id && !pad.backdrill) {
-              const padColor = copperColor(color, via.net, this.colorMode);
+              const padColor = this.material(color, via.net);
               if (pad.backdrillBase)
                 this.appendPad(backdrillBasePads, pad, via, padColor);
               else if (pad.custom?.length)

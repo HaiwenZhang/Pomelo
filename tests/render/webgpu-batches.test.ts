@@ -3,42 +3,6 @@ import { test, expect } from "vitest";
 import { WebGPUBatchUploader } from "../../src/lib/render/webgpu-batch-uploader";
 import type { BoardScene } from "../../src/lib/board/model";
 
-test("batch uploader releases owned GPU buffers but skips borrowed ranges", () => {
-  const destroyed: string[] = [];
-  const buffer = (name: string) =>
-    ({
-      destroy() {
-        destroyed.push(name);
-      },
-    }) as GPUBuffer;
-  const uploader = new WebGPUBatchUploader({} as GPUDevice);
-  uploader.destroy([
-    {
-      buffer: buffer("positions"),
-      residualBuffer: buffer("residual"),
-      indexBuffer: buffer("indices"),
-      colorBuffer: buffer("color"),
-      count: 1,
-      layer: 0,
-      category: "zone",
-    },
-    {
-      buffer: buffer("borrowed"),
-      residualBuffer: buffer("borrowed-low"),
-      count: 1,
-      layer: 0,
-      category: "zone",
-      borrowed: true,
-    },
-  ] as never);
-  expect(destroyed).toStrictEqual([
-    "positions",
-    "residual",
-    "indices",
-    "color",
-  ]);
-});
-
 test("scene upload applies the requested color mode to the GPU zone color buffer", () => {
   const previous = (globalThis as { GPUBufferUsage?: unknown }).GPUBufferUsage;
   (globalThis as { GPUBufferUsage?: unknown }).GPUBufferUsage = {
@@ -77,7 +41,9 @@ test("scene upload applies the requested color mode to the GPU zone color buffer
     ],
   };
   try {
-    const [zone] = new WebGPUBatchUploader(device).upload(scene, {
+    const {
+      batches: [zone],
+    } = new WebGPUBatchUploader(device).upload(scene, {
       kind: "scene",
       colorMode: "net",
     });

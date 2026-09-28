@@ -7,6 +7,7 @@ import { ArcBatchBuilder } from "./arc-batch-builder";
 import { Disposables, type IDisposable } from "../disposable";
 
 interface ResourceFields {
+  format: GPUTextureFormat;
   canvas: HTMLCanvasElement;
   onError: (message: string) => void;
   onSelection?: (selection: Selection | null) => void;
@@ -36,6 +37,7 @@ interface ResourceFields {
 }
 
 export class WebGPUResources implements IDisposable {
+  readonly format!: ResourceFields["format"];
   readonly canvas!: ResourceFields["canvas"];
   readonly onError!: ResourceFields["onError"];
   readonly onSelection!: ResourceFields["onSelection"];
@@ -153,7 +155,7 @@ export class WebGPUResources implements IDisposable {
             },
           ],
         },
-        primitive: { topology: "triangle-list" },
+        primitive: { topology: "triangle-strip" },
         depthStencil: {
           format: "depth24plus-stencil8",
           depthWriteEnabled: false,
@@ -225,6 +227,7 @@ export class WebGPUResources implements IDisposable {
       const arcModule = device.createShaderModule({ code: arcShader });
       const arcPipeline = await device.createRenderPipelineAsync({
         ...polygonDescriptor,
+        primitive: { topology: "triangle-strip" },
         vertex: {
           module: arcModule,
           entryPoint: "vs",
@@ -342,6 +345,7 @@ export class WebGPUResources implements IDisposable {
       context.configure({ device, format, alphaMode: "opaque" });
       configured = true;
       return new WebGPUResources({
+        format,
         canvas,
         onError,
         onSelection,

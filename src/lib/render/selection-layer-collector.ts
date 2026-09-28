@@ -2,7 +2,7 @@ import type { BoardScene, Pin, Segment, Via, Zone } from "../board/model";
 
 type LayerGroup<T> = { members: T[]; lastPosition: number };
 
-/** Collects source references for selection without expanding their geometry. */
+/** Collects source references by layer for scenes and selections without expanding geometry. */
 export class SelectionLayerCollector {
   private static appendOwner<T>(
     groups: Map<number, LayerGroup<T>>,

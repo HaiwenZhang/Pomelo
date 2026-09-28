@@ -1,3 +1,6 @@
+import { GpuGeometry } from "./gpu-geometry";
+import { GpuBatchSet } from "./gpu-batch-set";
+import { BatchRangeIndex } from "./batch-range-index";
 import type { BoardScene } from "../board/model";
 /// <reference types="@webgpu/types" />
 
@@ -22,11 +25,12 @@ export type GpuBatch = Omit<
   colorBuffer?: GPUBuffer;
   count: number;
   firstInstance?: number;
-  borrowed?: boolean;
+  readonly owner: GpuGeometry;
+  spatialIndex?: BatchRangeIndex;
 };
 
 export type UploadOptions =
-  | { kind: "scene"; colorMode?: ColorMode }
+  | { kind: "scene"; colorMode?: ColorMode | "dynamic" }
   | { kind: "selection"; visibility?: DisplayOptions };
 
 export class WebGPUBatchUploader implements IDisposable {
@@ -55,23 +59,14 @@ export class WebGPUBatchUploader implements IDisposable {
     }
   }
 
-  destroy(values: GpuBatch[]) {
-    values.forEach((batch) => {
-      if (batch.borrowed) return;
-      batch.buffer.destroy();
-      batch.residualBuffer.destroy();
-      batch.indexBuffer?.destroy();
-      batch.colorBuffer?.destroy();
-    });
-  }
-
   private *uploadSteps(
     value: BoardScene,
     options: UploadOptions,
-  ): Generator<void, GpuBatch[]> {
+  ): Generator<void, GpuBatchSet> {
     const reuseZones = options.kind === "selection";
     const uploader = this;
-    const result: GpuBatch[] = [],
+    const packets = new GpuBatchSet(),
+      result = packets.batches,
       allocated: GPUBuffer[] = [];
     let complete = false;
     function* uploadBuffer(
@@ -120,9 +115,9 @@ export class WebGPUBatchUploader implements IDisposable {
             if (!source) continue;
             const last = result.at(-1);
             if (
-              last?.borrowed &&
+              last &&
               last.category === "zone" &&
-              last.buffer === source.batch.buffer
+              last.owner === source.batch.owner
             ) {
               // Retain selected ranges within their existing packed fill. The
               // copper draw path can combine contiguous ranges without drawing
@@ -134,7 +129,6 @@ export class WebGPUBatchUploader implements IDisposable {
                 ...source.batch,
                 zones: [source.range],
                 bounds: source.range.bounds,
-                borrowed: true,
               });
           }
           yield;
@@ -150,13 +144,13 @@ export class WebGPUBatchUploader implements IDisposable {
                 ...entry.batch,
                 firstInstance: entry.start,
                 count: entry.count,
-                borrowed: true,
               });
             yield;
           }
           continue;
         }
         if (!batch.data.length) continue;
+        const spatialIndex = yield* BatchRangeIndex.buildSteps(batch);
         const buffer = yield* uploadBuffer(batch.data, GPUBufferUsage.VERTEX),
           residualBuffer = yield* uploadBuffer(
             batch.residual,
@@ -168,7 +162,11 @@ export class WebGPUBatchUploader implements IDisposable {
         const colorBuffer = batch.color
           ? yield* uploadBuffer(batch.color, GPUBufferUsage.VERTEX)
           : undefined;
+        const owner = new GpuGeometry(allocated.splice(0));
+        packets.own(owner);
         result.push({
+          owner,
+          spatialIndex,
           layer: batch.layer,
           category: batch.category,
           triangles: batch.triangles,
@@ -192,16 +190,19 @@ export class WebGPUBatchUploader implements IDisposable {
         yield;
       }
       complete = true;
-      return result;
+      return packets;
     } finally {
-      if (!complete) allocated.forEach((buffer) => buffer.destroy());
+      if (!complete) {
+        packets.dispose();
+        allocated.forEach((buffer) => buffer.destroy());
+      }
     }
   }
 
   upload(
     value: BoardScene,
     options: UploadOptions = { kind: "scene" },
-  ): GpuBatch[] {
+  ): GpuBatchSet {
     const steps = this.uploadSteps(value, options);
     let step = steps.next();
     while (!step.done) step = steps.next();
@@ -227,7 +228,7 @@ export class WebGPUBatchUploader implements IDisposable {
         if (pause) await pause;
       }
     } finally {
-      steps.return([]);
+      steps.return(new GpuBatchSet());
     }
   }
 

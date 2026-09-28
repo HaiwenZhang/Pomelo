@@ -89,3 +89,27 @@ test("Color By Layer uses layer color for all copper regardless of net", () => {
   expect(entries("etch")).toEqual(Array(3).fill(rgb(64, 128, 192)));
   expect([...batch("zone").color!]).toEqual([...rgb(64, 128, 192), 1]);
 });
+
+test("dynamic copper materials retain net RGB and exact layer RGB without growing vertex stride", async () => {
+  const { copperMaterial, copperColor } =
+    await import("../../src/lib/render/color-mode");
+  for (const color of [
+    [1, 1, 1],
+    [0, 0, 0],
+    [64 / 255, 128 / 255, 192 / 255],
+  ]) {
+    for (const net of [0, 1, 257]) {
+      const material = new Float32Array(copperMaterial(color, net, "dynamic"));
+      expect([...material.slice(0, 3)]).toEqual(
+        copperColor(color, net, "net").map(Math.fround),
+      );
+      const packed = -material[3] - 1;
+      expect([
+        (packed >>> 16) & 255,
+        (packed >>> 8) & 255,
+        packed & 255,
+      ]).toEqual(color.map((c) => Math.round(c * 255)));
+      expect(material.length).toBe(4);
+    }
+  }
+});

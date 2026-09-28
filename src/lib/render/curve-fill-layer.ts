@@ -17,13 +17,25 @@ type Entry = {
   bytes: number;
   view: Bounds;
   tolerance: number;
-  ranges: { start: number; count: number; outer: boolean }[];
+  ranges: { start: number; count: number; outer: boolean; bounds: Bounds }[];
 };
 
 export class CurveFillLayer implements IDisposable {
   private readonly entries = new Map<Zone, Entry>();
   private readonly curved = new WeakMap<Zone, boolean>();
   private bytes = 0;
+  private readonly used = new Set<Zone>();
+  readonly stats = {
+    hits: 0,
+    misses: 0,
+    evictions: 0,
+    bytes: 0,
+    overBudgetBytes: 0,
+  };
+
+  beginFrame() {
+    this.used.clear();
+  }
 
   private constructor(
     private readonly device: GPUDevice,
@@ -103,6 +115,8 @@ export class CurveFillLayer implements IDisposable {
   clear() {
     for (const entry of this.entries.values()) this.destroy(entry);
     this.entries.clear();
+    this.used.clear();
+    this.stats.bytes = this.stats.overBudgetBytes = 0;
   }
   dispose() {
     this.clear();
@@ -129,24 +143,14 @@ export class CurveFillLayer implements IDisposable {
     }
     return value;
   }
-  draw(
-    pass: GPURenderPassEncoder,
-    zone: Zone,
-    view: Bounds,
-    origin: Point,
-    scale: number,
-    dpr: number,
-    color: GPUBuffer,
-    bind: GPUBindGroup,
-    fill: GPUBindGroup,
-    labels?: () => void,
-  ) {
-    const { toggle, apply, clearScratch, clearAll, cover } = this;
+  /** Run before command encoding: all buffer creation and tessellation live here. */
+  prepare(zone: Zone, view: Bounds, origin: Point, scale: number, dpr: number) {
     // Quarter physical pixel, rounded toward finer detail. Overscan allows
     // panning without rebuilding; higher detail is retained on zoom-out.
     const tolerance = 0.25 / 2 ** Math.ceil(Math.log2(scale * dpr));
     let entry = this.entries.get(zone);
     if (!entry || entry.tolerance > tolerance || !contains(entry.view, view)) {
+      this.stats.misses++;
       if (entry) {
         this.destroy(entry);
         this.entries.delete(zone);
@@ -191,6 +195,20 @@ export class CurveFillLayer implements IDisposable {
             start,
             count: vertices.length / 2 - start,
             outer: i === 0,
+            bounds: ring.reduce(
+              (b, p) => ({
+                minX: Math.min(b.minX, p[0]),
+                maxX: Math.max(b.maxX, p[0]),
+                minY: Math.min(b.minY, p[1]),
+                maxY: Math.max(b.maxY, p[1]),
+              }),
+              {
+                minX: Infinity,
+                minY: Infinity,
+                maxX: -Infinity,
+                maxY: -Infinity,
+              },
+            ),
           });
       }
       const split = PositionPrecision.split(vertices, 2, 2),
@@ -211,16 +229,37 @@ export class CurveFillLayer implements IDisposable {
         tolerance,
       };
       this.bytes += entry.bytes;
-    }
+    } else this.stats.hits++;
     // Insertion order is LRU. No eviction during encoding: an earlier draw
     // in this same command buffer may still reference an entry.
     this.entries.delete(zone);
     this.entries.set(zone, entry);
+    this.used.add(zone);
+    this.stats.bytes = this.bytes;
+  }
+
+  draw(
+    pass: GPURenderPassEncoder,
+    zone: Zone,
+    color: GPUBuffer,
+    bind: GPUBindGroup,
+    fill: GPUBindGroup,
+    scissor: (bounds: Bounds) => readonly [number, number, number, number],
+    width: number,
+    height: number,
+    labels?: () => void,
+  ) {
+    const entry = this.entries.get(zone);
+    if (!entry) throw new Error("Curve fill must be prepared before encoding");
+    const { toggle, apply, clearScratch, clearAll, cover } = this;
     pass.setVertexBuffer(0, entry.data);
     pass.setVertexBuffer(1, entry.low);
     pass.setVertexBuffer(2, color);
     pass.setBindGroup(0, bind);
     for (const range of entry.ranges) {
+      const rect = scissor(range.bounds);
+      if (!rect[2] || !rect[3]) continue;
+      pass.setScissorRect(...rect);
       pass.setPipeline(toggle);
       pass.draw(range.count, 1, range.start);
       pass.setPipeline(apply);
@@ -229,6 +268,7 @@ export class CurveFillLayer implements IDisposable {
       pass.setPipeline(clearScratch);
       pass.draw(6);
     }
+    pass.setScissorRect(0, 0, width, height);
     pass.setStencilReference(1);
     pass.setPipeline(cover);
     pass.setBindGroup(0, fill);
@@ -247,8 +287,14 @@ export class CurveFillLayer implements IDisposable {
   finishFrame() {
     for (const [zone, entry] of this.entries) {
       if (this.bytes <= 64 * 1024 * 1024) break;
+      if (this.used.has(zone)) continue;
       this.destroy(entry);
       this.entries.delete(zone);
+      this.stats.evictions++;
     }
+    // A visible working set is a soft lower bound: do not evict geometry that
+    // the very next frame would rebuild. Old off-screen entries still obey LRU.
+    this.stats.bytes = this.bytes;
+    this.stats.overBudgetBytes = Math.max(0, this.bytes - 64 * 1024 * 1024);
   }
 }
