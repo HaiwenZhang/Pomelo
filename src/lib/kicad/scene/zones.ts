@@ -3,6 +3,7 @@ import type { Bounds, Layer, Point, Zone } from "../../board/model";
 import { ZoneShape } from "../../board/shapes/zone";
 import { PolygonShape } from "../../board/shapes/polygon";
 import { cooperative } from "../../cooperative";
+import { splitKiCadFillRing } from "./fill-rings";
 import type { KiCadBoardIndex } from "../syntax/index";
 import {
   kiCadAtom,
@@ -102,8 +103,12 @@ export class KiCadZoneBuilder {
         sourcePoints += ring.length;
         if (ring.length < 3)
           throw new Error(`KiCad 铜区填充点数不足 @${span.start}`);
-        const mesh = await new CopperMesh([ring]).build(signal);
-        const boundaryBreaks = new PolygonShape([ring]).bridgeEdges();
+        const rings = splitKiCadFillRing(ring);
+        const mesh = await new CopperMesh(rings).build(signal);
+        const boundaryBreaks =
+          rings.length === 1
+            ? new PolygonShape(rings).bridgeEdges()
+            : new Uint32Array(0);
         const zone: Zone = {
           id: 0x78000000 + zones.length,
           layer,

@@ -195,10 +195,13 @@ export class KiCadPadBuilder {
                   ? [0]
                   : layerName === "B.Cu"
                     ? [layers.length - 1]
-                    : [];
+                    : layerIds.has(layerName)
+                      ? [layerIds.get(layerName)!]
+                      : [];
             if (!targets.length)
               throw new Error(`KiCad 焊盘 Padstack 层未支持 ${layerName}`);
             for (const id of targets) {
+              if (layerName === "Inner" && overrides.has(id)) continue;
               overrides.set(id, { shape, width, height });
               layerOverrides++;
             }
