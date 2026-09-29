@@ -1,6 +1,7 @@
 import type { BrdHeader } from "./header";
 import { AllegroFixedLayoutReader } from "./layouts";
-import type { Raw as RawRecord, Reader } from "./reader";
+import type { KnownRecordType, RecordBodies, RawRecord } from "./record-types";
+import type { Reader } from "./reader";
 import { getScannableRecordByteLength } from "./record-scan";
 import { readDefinitionTable } from "./records/definitions";
 import { readField } from "./records/fields";
@@ -17,7 +18,7 @@ import { readProperty } from "./records/properties";
 import { readSignalIntegrityModel, readTextGraphic } from "./records/text";
 import { parserError } from "../../parser-error";
 
-type VariableRecordDecoder = (reader: Reader, header: BrdHeader) => RawRecord;
+type VariableRecordDecoder = (reader: Reader, header: BrdHeader) => object;
 
 const VARIABLE_RECORD_DECODERS = new Map<number, VariableRecordDecoder>([
   [0x03, readField],
@@ -51,9 +52,12 @@ export class AllegroRecordReader {
     );
   }
 
-  read(recordType: number): RawRecord {
+  read<T extends KnownRecordType>(recordType: T): RecordBodies[T];
+  read(recordType: number): RawRecord;
+  read(recordType: number): object {
     const decodeRecord = VARIABLE_RECORD_DECODERS.get(recordType);
-    if (decodeRecord) return decodeRecord(this.reader, this.header);
+    if (decodeRecord)
+      return decodeRecord(this.reader, this.header) as RawRecord;
     return this.readFixedRecord(recordType);
   }
 
@@ -71,7 +75,10 @@ export class AllegroRecordReader {
   /** Initial indexing needs only the key and boundary. Variable records still validate payloads. */
   scanKey(recordType: number): number | undefined {
     const recordByteLength = this.scanByteLengths[recordType];
-    if (!recordByteLength) return this.read(recordType).Key;
+    if (!recordByteLength) {
+      const key = this.read(recordType).Key;
+      return typeof key === "number" ? key : undefined;
+    }
 
     const bodyOffset = this.reader.offset;
     // The type byte was already consumed. Validate the entire remaining body

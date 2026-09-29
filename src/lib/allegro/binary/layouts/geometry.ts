@@ -1,8 +1,18 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type {
+  ArcBody,
+  FootprintRectangleBody,
+  GraphicBody,
+  SegmentBody,
+  RectangleBody,
+  ShapeBody,
+  KeepoutBody,
+  RawRecord,
+} from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x01 */
-export function readArc(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readArc(reader: Reader, formatVersion: number): ArcBody {
+  const record: Partial<ArcBody> = {};
   reader.skip(1);
   record.UnknownByte = reader.u8();
   record.SubType = reader.u8();
@@ -24,15 +34,15 @@ export function readArc(reader: Reader, formatVersion: number): RawRecord {
   record.CenterY = formatVersion < 160 ? reader.i32() : reader.float();
   record.Radius = formatVersion < 160 ? reader.i32() : reader.float();
   record.BoundingBoxCoords = reader.i32(4);
-  return record;
+  return record as ArcBody;
 }
 
 /** 0x0e */
 export function readFootprintRectangle(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): FootprintRectangleBody {
+  const record: Partial<FootprintRectangleBody> = {};
   record.T = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -48,12 +58,15 @@ export function readFootprintRectangle(
   record.Coords = reader.i32(4);
   record.UnknownArr = reader.u32(3);
   record.Rotation = reader.u32();
-  return record;
+  return record as FootprintRectangleBody;
 }
 
 /** 0x14 */
-export function readGraphic(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readGraphic(
+  reader: Reader,
+  formatVersion: number,
+): GraphicBody {
+  const record: Partial<GraphicBody> = {};
   record.Type = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -66,12 +79,15 @@ export function readGraphic(reader: Reader, formatVersion: number): RawRecord {
   record.SegmentPtr = reader.u32();
   record.Ptr0x03 = reader.u32();
   record.Ptr0x26 = reader.u32();
-  return record;
+  return record as GraphicBody;
 }
 
 /** 0x15 / 0x16 / 0x17 */
-export function readSegment(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readSegment(
+  reader: Reader,
+  formatVersion: number,
+): SegmentBody {
+  const record: Partial<SegmentBody> = {};
   reader.skip(3);
   record.Key = reader.u32();
   record.Next = reader.u32();
@@ -87,15 +103,15 @@ export function readSegment(reader: Reader, formatVersion: number): RawRecord {
   record.StartY = reader.i32();
   record.EndX = reader.i32();
   record.EndY = reader.i32();
-  return record;
+  return record as SegmentBody;
 }
 
 /** 0x24 */
 export function readRectangle(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): RectangleBody {
+  const record: Partial<RectangleBody> = {};
   record.Type = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -110,12 +126,12 @@ export function readRectangle(
   record.Unknown3 = reader.u32();
   record.Unknown4 = reader.u32();
   record.Rotation = reader.u32();
-  return record;
+  return record as RectangleBody;
 }
 
 /** 0x28 */
-export function readShape(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readShape(reader: Reader, formatVersion: number): ShapeBody {
+  const record: Partial<ShapeBody> = {};
   record.Type = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -140,12 +156,15 @@ export function readShape(reader: Reader, formatVersion: number): RawRecord {
     record.TablePtr_16x = reader.u32();
   }
   record.Coords = reader.i32(4);
-  return record;
+  return record as ShapeBody;
 }
 
 /** 0x34 */
-export function readKeepout(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readKeepout(
+  reader: Reader,
+  formatVersion: number,
+): KeepoutBody {
+  const record: Partial<KeepoutBody> = {};
   record.T = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -158,5 +177,5 @@ export function readKeepout(reader: Reader, formatVersion: number): RawRecord {
   record.FirstSegmentPtr = reader.u32();
   record.Ptr3 = reader.u32();
   record.Unknown2 = reader.u32();
-  return record;
+  return record as KeepoutBody;
 }

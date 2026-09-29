@@ -1,4 +1,5 @@
-import { LatestTask, type TaskTicket } from "./latest-task";
+import type { ProgressReporter } from "../progress";
+import { LatestTask } from "../latest-task";
 import { OverlayController } from "./overlay-controller";
 import { GpuScene } from "./gpu-scene";
 import { ScenePreparation } from "./scene-preparation";
@@ -9,9 +10,10 @@ import type { BoardScene, Bounds, Point, Zone } from "../board/model";
 import { type DisplayOptions } from "../board/display";
 import type { SearchItem } from "../board/search";
 import { Disposables } from "../disposable";
-import { Camera, type ViewportInsets } from "../interaction/camera";
-import { canvasBoardPoint } from "../interaction/cursor-coordinate";
-import { hoverDetails } from "../interaction/hover-details";
+import type { ViewportInsets } from "../interaction/camera";
+import { BoardViewport } from "../interaction/board-viewport";
+import { CanvasInteractionController } from "../interaction/canvas-interaction";
+import { TooltipController } from "../interaction/tooltip-controller";
 import {
   type PickFilter,
   type PickHit,
@@ -21,17 +23,14 @@ import {
 import type { ColorMode } from "./color-mode";
 import {
   Renderer,
-  type HoverTooltip,
   type NavigationTool,
-  type ViewState,
   type SelectionTaskState,
 } from "./renderer";
 import { WebGPUFrame } from "./webgpu-frame";
 import { WebGPUResources } from "./webgpu-resources";
 
-const TOOLTIP_DELAY = 350;
-
 export class WebGPURenderer extends Renderer {
+  private readonly events = new AbortController();
   private readonly disposables = new Disposables();
   private readonly preparation: ScenePreparation;
   private readonly overlay: OverlayController;
@@ -61,182 +60,45 @@ export class WebGPURenderer extends Renderer {
   }
   private display = BoardDisplay.createDisplayOptions();
   private colorMode: ColorMode = "net";
-  private readonly camera = new Camera();
-  private navigationTool: NavigationTool = "select";
-  private insets: ViewportInsets = { left: 0, right: 0, top: 0, bottom: 0 };
-  private fitScale = 10;
-  private view: ViewState = { zoom: 100, pixelsPerMm: 10 };
-  private readonly viewListeners = new Set<() => void>();
-  private readonly tooltipListeners = new Set<() => void>();
-  private tooltip: HoverTooltip | null = null;
+  private readonly viewport: BoardViewport;
+  private readonly input: CanvasInteractionController;
+  private readonly tooltip: TooltipController;
 
-  readonly getView = () => this.view;
+  readonly getView = () => this.viewport.getView();
+  readonly subscribeView = (listener: () => void) =>
+    this.viewport.subscribeView(listener);
+  readonly getTooltip = () => this.tooltip.getTooltip();
+  readonly subscribeTooltip = (listener: () => void) =>
+    this.tooltip.subscribeTooltip(listener);
+
   getBoardPoint(clientX: number, clientY: number): Point | null {
-    return canvasBoardPoint(
-      this.camera,
-      this.scene?.bounds ?? null,
-      this.resources.canvas.getBoundingClientRect(),
-      clientX,
-      clientY,
-    );
-  }
-  readonly subscribeView = (listener: () => void) => {
-    this.viewListeners.add(listener);
-    return () => {
-      this.viewListeners.delete(listener);
-    };
-  };
-  readonly getTooltip = () => this.tooltip;
-  readonly subscribeTooltip = (listener: () => void) => {
-    this.tooltipListeners.add(listener);
-    return () => {
-      this.tooltipListeners.delete(listener);
-    };
-  };
-
-  private setTooltip(value: HoverTooltip | null) {
-    if (this.tooltip === value) return;
-    this.tooltip = value;
-    this.tooltipListeners.forEach((listener) => listener());
+    return this.viewport.getBoardPoint(clientX, clientY);
   }
 
   setNavigationTool(tool: NavigationTool) {
-    this.navigationTool = tool;
-    this.setHover(null);
-    this.cancel();
-    this.resources.canvas.style.cursor = tool === "pan" ? "grab" : "default";
+    this.input.setTool(tool);
   }
 
   setViewportInsets(insets: ViewportInsets) {
-    this.insets = insets;
+    this.viewport.setInsets(insets);
   }
   private readonly sceneTasks = new LatestTask();
-  private readonly tooltipTasks = new LatestTask();
   private interaction: { filter: PickFilter; mode: SelectionMode } = {
     filter: "all",
     mode: "object",
   };
-  private tooltipTimer: ReturnType<typeof setTimeout> | undefined;
-  private tooltipJob: TaskTicket | null = null;
-  private pointer: {
-    id: number;
-    x: number;
-    y: number;
-    startX: number;
-    startY: number;
-    button: number;
-    dragging: boolean;
-  } | null = null;
-  private observer: ResizeObserver;
-
-  private readonly wheel = (e: WheelEvent) => {
-    e.preventDefault();
-    this.setHover(null);
-    const canvasBounds = this.resources.canvas.getBoundingClientRect();
-    this.camera.zoom(
-      Math.exp(-Math.max(-200, Math.min(200, e.deltaY)) * 0.006),
-      e.clientX - canvasBounds.left,
-      e.clientY - canvasBounds.top,
-      canvasBounds.width,
-      canvasBounds.height,
-    );
-    this.invalidate();
-  };
-
-  private readonly down = (e: PointerEvent) => {
-    if (e.button > 1) return;
-    this.resources.canvas.focus({ preventScroll: true });
-    this.pointer = {
-      id: e.pointerId,
-      x: e.clientX,
-      y: e.clientY,
-      startX: e.clientX,
-      startY: e.clientY,
-      button: e.button,
-      dragging: e.button === 1 || this.navigationTool === "pan",
-    };
-    this.setHover(null);
-    this.resources.canvas.setPointerCapture(e.pointerId);
-  };
-
-  private readonly move = (e: PointerEvent) => {
-    if (!this.pointer) {
-      if (this.navigationTool === "pan") return;
-      const hit = this.pick(e),
-        canvasBounds = this.resources.canvas.getBoundingClientRect();
-      this.setHover(hit);
-      this.scheduleTooltip(hit, [
-        e.clientX - canvasBounds.left,
-        e.clientY - canvasBounds.top,
-      ]);
-      return;
-    }
-    if (this.pointer.id !== e.pointerId) return;
-    if (
-      !this.pointer.dragging &&
-      Math.hypot(
-        e.clientX - this.pointer.startX,
-        e.clientY - this.pointer.startY,
-      ) > 4
-    )
-      this.pointer.dragging = true;
-    if (this.pointer.dragging) {
-      this.camera.pan(e.clientX - this.pointer.x, e.clientY - this.pointer.y);
-      this.pointer.x = e.clientX;
-      this.pointer.y = e.clientY;
-      this.resources.canvas.style.cursor = "grabbing";
-      this.invalidate();
-    }
-  };
-
-  private readonly up = (e: PointerEvent) => {
-    if (this.pointer?.id !== e.pointerId) return;
-    const click = this.pointer.button === 0 && !this.pointer.dragging;
-    this.pointer = null;
-    this.resources.canvas.style.cursor =
-      this.navigationTool === "pan" ? "grab" : "default";
-    if (click) this.select(this.pick(e));
-    if (this.resources.canvas.hasPointerCapture(e.pointerId))
-      this.resources.canvas.releasePointerCapture(e.pointerId);
-  };
-
-  private readonly cancel = () => {
-    this.pointer = null;
-    this.hideTooltip();
-    this.resources.canvas.style.cursor =
-      this.navigationTool === "pan" ? "grab" : "default";
-  };
-
-  private readonly leave = () => {
-    if (!this.pointer) this.setHover(null);
-  };
-
-  private readonly key = (e: KeyboardEvent) => {
-    if (
-      e.target instanceof HTMLElement &&
-      e.target.closest("input,select,textarea,[contenteditable=true]")
-    )
-      return;
-    if (e.key === "F2") {
-      e.preventDefault();
-      this.setHover(null);
-      this.fit();
-    }
-    if (e.key === "Escape") {
-      this.setHover(null);
-      this.select(null);
-    }
-  };
-
-  private readonly blur = () => this.setHover(null);
-
   private constructor(private readonly resources: WebGPUResources) {
     super(resources.canvas);
     this.preparation = new ScenePreparation(
       resources.device,
       resources.labels.font,
     );
-    this.frameRenderer = new WebGPUFrame(resources, this.camera);
+    this.viewport = new BoardViewport(
+      resources.canvas,
+      () => this.scene?.bounds ?? null,
+      () => this.invalidate(),
+    );
+    this.frameRenderer = new WebGPUFrame(resources, this.viewport.camera);
     this.overlay = new OverlayController(resources, {
       scene: () => this.gpuScene,
       display: () => this.display,
@@ -253,21 +115,38 @@ export class WebGPURenderer extends Renderer {
         onError(`图形设备中断：${info.message || info.reason}`);
       }
     });
-    device.addEventListener("uncapturederror", (e) => onError(e.error.message));
-    canvas.addEventListener("wheel", this.wheel, { passive: false });
-    canvas.addEventListener("pointerdown", this.down);
-    canvas.addEventListener("pointermove", this.move);
-    canvas.addEventListener("pointerup", this.up);
-    canvas.addEventListener("pointercancel", this.cancel);
-    canvas.addEventListener("lostpointercapture", this.cancel);
-    canvas.addEventListener("pointerleave", this.leave);
-    window.addEventListener("keydown", this.key);
-    this.observer = new ResizeObserver(() => {
-      this.hideTooltip();
-      this.invalidate();
+    device.addEventListener(
+      "uncapturederror",
+      (e) => onError(e.error.message),
+      {
+        signal: this.events.signal,
+      },
+    );
+    this.tooltip = new TooltipController({
+      context: () =>
+        this.scene && this.index
+          ? {
+              scene: this.scene,
+              index: this.index,
+              mode: this.interaction.mode,
+            }
+          : null,
+      onError,
     });
-    this.observer.observe(canvas);
-    window.addEventListener("blur", this.blur);
+    this.input = new CanvasInteractionController(canvas, this.viewport, {
+      pick: (x, y) => this.pick(x, y),
+      hover: (hit) => this.setHover(hit),
+      select: (hit) => {
+        void this.select(hit);
+      },
+      scheduleTooltip: (hit, point) => this.tooltip.schedule(hit, point),
+      hideTooltip: () => this.tooltip.hide(),
+      fit: () => this.fit(),
+      resize: () => {
+        this.tooltip.hide();
+        this.invalidate();
+      },
+    });
     this.invalidate();
   }
 
@@ -294,61 +173,10 @@ export class WebGPURenderer extends Renderer {
     }
   }
 
-  private hideTooltip() {
-    clearTimeout(this.tooltipTimer);
-    this.tooltipTimer = undefined;
-    this.tooltipTasks.cancel();
-    this.tooltipJob = null;
-    this.setTooltip(null);
-  }
-
-  private scheduleTooltip(hit: PickHit | null, point: Point) {
-    this.hideTooltip();
-    if (!hit || !this.scene || !this.index) return;
-    const source = this.scene,
-      sourceIndex = this.index,
-      mode = this.interaction.mode,
-      job = this.tooltipTasks.start();
-    this.tooltipJob = job;
-    this.tooltipTimer = setTimeout(async () => {
-      this.tooltipTimer = undefined;
-      try {
-        const lines = await hoverDetails(
-          source,
-          sourceIndex,
-          hit,
-          mode,
-          job.signal,
-        );
-        if (
-          job.signal.aborted ||
-          this.disposed ||
-          this.scene !== source ||
-          this.tooltipJob !== job
-        )
-          return;
-        this.setTooltip({ lines, point });
-      } catch (error) {
-        if (!job.signal.aborted && !this.disposed) {
-          this.setTooltip(null);
-          this.resources.onError(
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-      } finally {
-        job.finish();
-      }
-    }, TOOLTIP_DELAY);
-  }
-
   private setHover(hit: PickHit | null) {
-    if (!hit) this.hideTooltip();
+    if (!hit) this.tooltip.hide();
     this.overlay.setHover(hit);
-    this.resources.canvas.style.cursor = hit
-      ? "pointer"
-      : this.navigationTool === "pan"
-        ? "grab"
-        : "default";
+    this.input.setHoverCursor(hit);
   }
   private select(hit: PickHit | null) {
     return this.overlay.select(hit);
@@ -357,14 +185,7 @@ export class WebGPURenderer extends Renderer {
   private draw() {
     this.animationFrame = 0;
     if (this.disposed) return;
-    const zoom = (this.camera.scale / this.fitScale) * 100;
-    if (
-      this.view.zoom !== zoom ||
-      this.view.pixelsPerMm !== this.camera.scale
-    ) {
-      this.view = { zoom, pixelsPerMm: this.camera.scale };
-      this.viewListeners.forEach((listener) => listener());
-    }
+    this.viewport.publishView();
     this.frameRenderer.draw({
       scene: this.scene,
       colorMode: this.colorMode,
@@ -388,69 +209,25 @@ export class WebGPURenderer extends Renderer {
   }
 
   private focusBounds(bounds: Bounds, source: BoardScene) {
-    const canvasBounds = this.resources.canvas.getBoundingClientRect();
-    this.camera.x =
-      (bounds.minX + bounds.maxX - source.bounds.minX - source.bounds.maxX) / 2;
-    this.camera.y =
-      (bounds.minY + bounds.maxY - source.bounds.minY - source.bounds.maxY) / 2;
-    this.camera.scale =
-      Math.min(
-        400,
-        Math.max(1, canvasBounds.width - this.insets.left - this.insets.right) /
-          Math.max(3, bounds.maxX - bounds.minX),
-        Math.max(
-          1,
-          canvasBounds.height - this.insets.top - this.insets.bottom,
-        ) / Math.max(3, bounds.maxY - bounds.minY),
-      ) * 0.72;
-    this.camera.x +=
-      ((this.insets.right - this.insets.left) / (2 * this.camera.scale)) *
-      this.camera.horizontalSign;
-    this.camera.y +=
-      (this.insets.top - this.insets.bottom) / (2 * this.camera.scale);
-    this.invalidate();
+    this.viewport.focusBounds(bounds, source.bounds);
   }
 
   fit() {
     this.setHover(null);
-    if (this.scene) {
-      const canvasBounds = this.resources.canvas.getBoundingClientRect();
-      this.camera.fit(
-        this.scene.bounds,
-        canvasBounds.width,
-        canvasBounds.height,
-        this.insets,
-      );
-      this.fitScale = this.camera.scale;
-      this.invalidate();
-    }
+    this.viewport.fit();
   }
 
   zoom(factor: number) {
     this.setHover(null);
-    const canvasBounds = this.resources.canvas.getBoundingClientRect();
-    this.camera.zoom(
-      factor,
-      (canvasBounds.width + this.insets.left - this.insets.right) / 2,
-      (canvasBounds.height + this.insets.top - this.insets.bottom) / 2,
-      canvasBounds.width,
-      canvasBounds.height,
-    );
-    this.invalidate();
+    this.viewport.zoom(factor);
   }
 
-  private pick(e: PointerEvent) {
-    const canvasBounds = this.resources.canvas.getBoundingClientRect();
-    return this.index && this.scene
+  private pick(clientX: number, clientY: number) {
+    const point = this.viewport.worldPoint(clientX, clientY);
+    return this.index && point
       ? this.index.pick(
-          this.camera.worldPoint(
-            e.clientX - canvasBounds.left,
-            e.clientY - canvasBounds.top,
-            canvasBounds.width,
-            canvasBounds.height,
-            this.scene.bounds,
-          ),
-          this.camera.scale,
+          point,
+          this.viewport.camera.scale,
           this.display,
           this.interaction.filter,
         )
@@ -460,7 +237,7 @@ export class WebGPURenderer extends Renderer {
   private clearScene() {
     this.overlay.clearSelected();
     this.setHover(null);
-    this.cancel();
+    this.input.cancel();
     this.gpuScene?.dispose();
     this.gpuScene = null;
     this.resources.labels.clear();
@@ -484,7 +261,7 @@ export class WebGPURenderer extends Renderer {
   async prepareScene(
     value: BoardScene,
     signal: AbortSignal,
-    progress?: (phase: string) => void,
+    progress?: ProgressReporter,
   ) {
     signal.throwIfAborted();
     if (this.disposed) throw new Error("渲染器已关闭");
@@ -502,7 +279,7 @@ export class WebGPURenderer extends Renderer {
       task.assertCurrent();
       this.attachScene(prepared);
       prepared = null;
-      progress?.("等待首帧");
+      progress?.({ phase: "等待首帧", fraction: 0.9 });
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => resolve()),
       );
@@ -554,9 +331,9 @@ export class WebGPURenderer extends Renderer {
   }
 
   setFlipped(value: boolean) {
-    this.camera.flipped = value;
+    this.viewport.setFlipped(value);
     this.setHover(null);
-    this.cancel();
+    this.input.cancel();
     this.invalidate();
   }
 
@@ -576,27 +353,13 @@ export class WebGPURenderer extends Renderer {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.viewListeners.clear();
+    this.events.abort();
+    this.input.dispose();
+    this.tooltip.dispose();
+    this.viewport.dispose();
     this.overlay.dispose();
-    this.hideTooltip();
-    this.tooltipListeners.clear();
-    window.removeEventListener("blur", this.blur);
-    this.sceneTasks.cancel();
-    cancelAnimationFrame(this.animationFrame);
-    this.observer.disconnect();
-    this.resources.canvas.removeEventListener("wheel", this.wheel);
-    this.resources.canvas.removeEventListener("pointerdown", this.down);
-    this.resources.canvas.removeEventListener("pointermove", this.move);
-    this.resources.canvas.removeEventListener("pointerup", this.up);
-    this.resources.canvas.removeEventListener("pointercancel", this.cancel);
-    this.resources.canvas.removeEventListener(
-      "lostpointercapture",
-      this.cancel,
-    );
-    this.resources.canvas.removeEventListener("pointerleave", this.leave);
-    window.removeEventListener("keydown", this.key);
     this.sceneTasks.dispose();
-    this.tooltipTasks.dispose();
+    cancelAnimationFrame(this.animationFrame);
     this.gpuScene?.dispose();
     this.gpuScene = null;
     this.disposables.dispose();

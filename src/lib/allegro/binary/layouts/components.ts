@@ -1,4 +1,10 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type {
+  ComponentInstanceBody,
+  FootprintDefinitionBody,
+  FootprintInstanceBody,
+  RawRecord,
+} from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x06 */
 export function readComponent(
@@ -25,8 +31,8 @@ export function readComponent(
 export function readComponentInstance(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): ComponentInstanceBody {
+  const record: Partial<ComponentInstanceBody> = {};
   reader.skip(3);
   record.Key = reader.u32();
   if (formatVersion < 160) {
@@ -37,7 +43,7 @@ export function readComponentInstance(
     record.X03Ptr = reader.u32();
     record.Unknown5 = reader.u32();
     record.FirstPadPtr = reader.u32();
-    return record;
+    return record as ComponentInstanceBody;
   }
   record.Next = reader.u32();
   if (formatVersion >= 172) {
@@ -54,7 +60,7 @@ export function readComponentInstance(
   record.X03Ptr = reader.u32();
   record.Unknown5 = reader.u32();
   record.FirstPadPtr = reader.u32();
-  return record;
+  return record as ComponentInstanceBody;
 }
 
 /** 0x0f */
@@ -119,8 +125,8 @@ export function readFunctionInstance(
 export function readFootprintDefinition(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): FootprintDefinitionBody {
+  const record: Partial<FootprintDefinitionBody> = {};
   reader.skip(3);
   record.Key = reader.u32();
   record.FpStrRef = reader.u32();
@@ -141,15 +147,15 @@ export function readFootprintDefinition(
   if (formatVersion >= 172) {
     record.Unknown3 = reader.u32();
   }
-  return record;
+  return record as FootprintDefinitionBody;
 }
 
 /** 0x2d */
 export function readFootprintInstance(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): FootprintInstanceBody {
+  const record: Partial<FootprintInstanceBody> = {};
   record.UnknownByte1 = reader.u8();
   record.Layer = reader.u8();
   record.UnknownByte2 = reader.u8();
@@ -168,7 +174,7 @@ export function readFootprintInstance(
     record.AreasPtr = reader.u32();
     record.UnknownPtr1 = reader.u32();
     record.UnknownPtr2 = reader.u32();
-    return record;
+    return record as FootprintInstanceBody;
   }
   record.Next = reader.u32();
   if (formatVersion >= 172) {
@@ -196,5 +202,5 @@ export function readFootprintInstance(
   record.AreasPtr = reader.u32();
   record.UnknownPtr1 = reader.u32();
   record.UnknownPtr2 = reader.u32();
-  return record;
+  return record as FootprintInstanceBody;
 }

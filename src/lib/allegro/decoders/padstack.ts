@@ -1,4 +1,8 @@
-import type { Raw } from "../binary/reader";
+import {
+  isRecordType,
+  type AllegroRecord,
+  type RecordLookup,
+} from "../binary/record-types";
 import type { BackdrillDefinition, BackdrillSpan } from "../../board/model";
 import { isUint32Words } from "../binary/record-values";
 function isConcentricCircle(value: unknown): value is {
@@ -24,13 +28,13 @@ function isConcentricCircle(value: unknown): value is {
   );
 }
 export interface ResolvedViaStack {
-  stack: Raw;
+  stack: AllegroRecord<0x1c>;
   backdrill?: BackdrillDefinition;
   regionCode?: number;
 }
 export class AllegroPadstackResolver {
   constructor(
-    readonly get: (key: number) => Raw | undefined,
+    readonly get: RecordLookup,
     readonly layerCount: number,
     readonly version = 0,
   ) {}
@@ -42,7 +46,7 @@ export class AllegroPadstackResolver {
     placedId: number,
   ):
     | {
-        stack: Raw;
+        stack: AllegroRecord<0x1c>;
         embeddedLayer?: number;
         regionCode?: number;
         die?: true;
@@ -52,8 +56,8 @@ export class AllegroPadstackResolver {
     const layerCount = this.layerCount;
     const version = this.version;
     const record = get(key);
-    if (record?.type === 0x1c) return { stack: record };
-    if (record?.type !== 0x2f) return;
+    if (isRecordType(record, 0x1c)) return { stack: record };
+    if (!isRecordType(record, 0x2f)) return;
     if (typeof record.T2 !== "number" || !Number.isSafeInteger(record.T2))
       return;
     const rawWords: unknown = record.UnknownArray;
@@ -71,7 +75,7 @@ export class AllegroPadstackResolver {
         words[2] !== 1 ||
         words[3] !== 0 ||
         words[4] !== 0 ||
-        stack?.type !== 0x1c ||
+        !isRecordType(stack, 0x1c) ||
         stack.StartLayer !== 0 ||
         stack.LayerCount !== 1 ||
         stack.PadType !== 26 ||
@@ -100,7 +104,7 @@ export class AllegroPadstackResolver {
         (encoded & 0xffff) !== 1 ||
         words[3] !== 0 ||
         words[4] !== 0 ||
-        stack?.type !== 0x1c ||
+        !isRecordType(stack, 0x1c) ||
         stack.StartLayer !== 0 ||
         stack.LayerCount !== 1 ||
         stack.PadType !== 10 ||
@@ -128,7 +132,7 @@ export class AllegroPadstackResolver {
       return;
     const stack = get(words[0]);
     if (
-      stack?.type !== 0x1c ||
+      !isRecordType(stack, 0x1c) ||
       stack.LayerCount !== 1 ||
       stack.DrillSize !== 0 ||
       stack.SlotY !== 0
@@ -145,8 +149,9 @@ export class AllegroPadstackResolver {
     const layerCount = this.layerCount;
     const version = this.version;
     const record = get(key);
-    if (record?.type === 0x1c) return { stack: record };
-    if (record?.type !== 0x2f || record.Type !== 0 || record.T2 !== 0) return;
+    if (isRecordType(record, 0x1c)) return { stack: record };
+    if (!isRecordType(record, 0x2f) || record.Type !== 0 || record.T2 !== 0)
+      return;
     const rawWords: unknown = record.UnknownArray;
     const words = isUint32Words(rawWords) ? rawWords : undefined;
     if (!words || words.length !== 6 || words[1] !== owner) return;
@@ -164,7 +169,7 @@ export class AllegroPadstackResolver {
         (encoded & 0xffff) !== layerCount ||
         words[3] !== 0 ||
         words[4] !== 0 ||
-        stack?.type !== 0x1c ||
+        !isRecordType(stack, 0x1c) ||
         stack.StartLayer !== 0 ||
         stack.LayerCount !== layerCount ||
         stack.PadType !== 4 ||
@@ -184,7 +189,7 @@ export class AllegroPadstackResolver {
     if (top + bottom >= layerCount) return;
     const stack = get(words[0]);
     if (
-      stack?.type !== 0x1c ||
+      !isRecordType(stack, 0x1c) ||
       stack.StartLayer !== 0 ||
       stack.LayerCount !== layerCount ||
       stack.DrillSize <= 0 ||

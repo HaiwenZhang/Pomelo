@@ -85,7 +85,7 @@ test("non-displayed shape records yield and cancel inside the copper stage", asy
         yield { type: 40, Key: 100 + i, Layer: 9 };
       }
     } else yield* records.call(source.db, type);
-  };
+  } as BrdDatabase["records"];
   const controller = new AbortController();
   try {
     await expect(

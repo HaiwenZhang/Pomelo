@@ -1,5 +1,5 @@
 import type { Bounds, Point } from "../board/model";
-import type { BoardFile } from "../viewer-store";
+import type { BoardFile } from "../import/model";
 import type { Camera } from "./camera";
 
 export interface CoordinateUnit {

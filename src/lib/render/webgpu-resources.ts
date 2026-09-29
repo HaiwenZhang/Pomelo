@@ -3,7 +3,7 @@ import type { Selection } from "../interaction/picking";
 import type { SelectionTaskState } from "./renderer";
 import { CurveFillLayer } from "./curve-fill-layer";
 import { LabelAtlas } from "./label-atlas";
-import { ArcBatchBuilder } from "./arc-batch-builder";
+import { arcVertexBuffers } from "./arc-batch-builder";
 import { Disposables, type IDisposable } from "../disposable";
 
 interface ResourceFields {
@@ -231,7 +231,7 @@ export class WebGPUResources implements IDisposable {
         vertex: {
           module: arcModule,
           entryPoint: "vs",
-          buffers: ArcBatchBuilder.vertexBuffers,
+          buffers: arcVertexBuffers,
         },
         fragment: { ...polygonDescriptor.fragment!, module: arcModule },
       });

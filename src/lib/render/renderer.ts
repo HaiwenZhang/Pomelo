@@ -1,3 +1,4 @@
+import type { ProgressReporter } from "../progress";
 import type { BoardScene, Point } from "../board/model";
 
 import type { SearchItem } from "../board/search";
@@ -11,20 +12,20 @@ import type { IDisposable } from "../disposable";
 import type { ViewportInsets } from "../interaction/camera";
 import type { ColorMode } from "./color-mode";
 
-export type NavigationTool = "select" | "pan";
-export interface ViewState {
-  zoom: number;
-  pixelsPerMm: number;
-}
+import type {
+  HoverTooltip,
+  NavigationTool,
+  ViewState,
+} from "../interaction/model";
+export type {
+  HoverTooltip,
+  NavigationTool,
+  ViewState,
+} from "../interaction/model";
 
 export interface SelectionTaskState {
   phase: string;
   error?: string;
-}
-
-export interface HoverTooltip {
-  point: Point;
-  lines: readonly string[];
 }
 
 /** The viewer-facing rendering contract shared by graphics backends. */
@@ -41,7 +42,7 @@ export abstract class Renderer implements IDisposable {
   abstract prepareScene(
     scene: BoardScene,
     signal: AbortSignal,
-    progress?: (phase: string) => void,
+    progress?: ProgressReporter,
   ): Promise<void>;
   abstract setDisplay(options: DisplayOptions): void;
   abstract setColorMode(mode: ColorMode): void;

@@ -1,6 +1,7 @@
 import { test, expect } from "vitest";
 
-import type { Raw } from "../../src/lib/allegro/binary/reader";
+import type { RawRecord } from "../../src/lib/allegro/binary/record-types";
+type Raw = RawRecord & { type: number };
 import { AllegroPadstackResolver } from "../../src/lib/allegro/decoders/padstack";
 import type { BoardScene, Pin } from "../../src/lib/board/model";
 
@@ -28,7 +29,7 @@ test("die reference resolves BOND TOP without inventing a physical copper layer"
     SlotX: 0,
     SlotY: 0,
   };
-  const wrapper: Raw = {
+  const wrapper = {
     type: 47,
     Type: 0,
     T2: 0xfc00,

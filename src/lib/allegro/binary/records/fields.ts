@@ -1,33 +1,33 @@
 import type { BrdHeader } from "../header";
-import type { Raw as RawRecord, Reader } from "../reader";
+import type { FieldBody } from "../record-types";
+import type { Reader } from "../reader";
 import { parserError } from "../../../parser-error";
 
 /** 0x03: a property field whose subtype determines the payload layout. */
 export function readField(
   reader: Reader,
   { version: formatVersion }: BrdHeader,
-): RawRecord {
+): FieldBody {
   const record = readFieldHeader(reader, formatVersion);
   readFieldPayload(reader, record, formatVersion);
   return record;
 }
 
-function readFieldHeader(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+function readFieldHeader(reader: Reader, formatVersion: number): FieldBody {
   reader.skip(1);
-  record.Hdr1 = reader.u16();
-  record.Key = reader.u32();
-  record.Next = reader.u32();
+  const Hdr1 = reader.u16();
+  const Key = reader.u32();
+  const Next = reader.u32();
   if (formatVersion >= 172) reader.skip(4);
-  record.SubType = reader.u8();
+  const SubType = reader.u8();
   reader.skip(1);
-  record.Size = reader.u16();
+  const Size = reader.u16();
   if (formatVersion >= 172) reader.skip(4);
-  return record;
+  return { Hdr1, Key, Next, SubType, Size };
 }
 
 function isDimensionSettings(
-  record: RawRecord,
+  record: FieldBody,
   formatVersion: number,
 ): boolean {
   // V174/V175 property 755 carries 80 bytes of dimension settings, not
@@ -44,7 +44,7 @@ function isDimensionSettings(
 
 function readFieldPayload(
   reader: Reader,
-  record: RawRecord,
+  record: FieldBody,
   formatVersion: number,
 ): void {
   if (isDimensionSettings(record, formatVersion)) {

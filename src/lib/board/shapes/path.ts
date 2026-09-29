@@ -1,4 +1,4 @@
-import { BoardIteration } from "../iteration";
+import { completeSteps } from "../../iteration";
 import type { Bounds, Point, Segment } from "../model";
 import { ArcShape } from "./arc";
 import { SegmentShape } from "./segment";
@@ -8,7 +8,7 @@ export class PathShape {
   // Keep analytic edges alongside this mesh. The mesh tolerance is a world-space
   // approximation for copper fill; outlines and tracks remain analytic on the GPU.
   flatten(tolerance = 0.00025): Point[] {
-    return BoardIteration.complete(this.flattenSteps(tolerance));
+    return completeSteps(this.flattenSteps(tolerance));
   }
   *flattenSteps(tolerance = 0.00025): Generator<void, Point[]> {
     const path = this.data;

@@ -6,6 +6,20 @@ import { BrdDatabase } from "../../src/lib/allegro/database";
 import type { BoardScene } from "../../src/lib/board/model";
 import { createViewerStore } from "../../src/lib/viewer-store";
 
+import {
+  importAllegro,
+  type AllegroImportDependencies,
+} from "../../src/lib/allegro/import";
+import { createBoardLoader } from "../../src/lib/import/load-board";
+
+function createTestStore(dependencies: AllegroImportDependencies) {
+  return createViewerStore(
+    createBoardLoader((_name, buffer, signal, progress, encoding) =>
+      importAllegro(buffer, signal, progress, encoding, dependencies),
+    ),
+  );
+}
+
 const header: BrdHeader = {
   magic: 0x140400,
   version: 172,
@@ -46,7 +60,7 @@ const dependencies = {
 };
 
 test("explicit encoding reaches the parser, reports bad offsets and clears diagnostics on reread", async () => {
-  const store = createViewerStore({
+  const store = createTestStore({
     parseBrd: async (buffer, _signal, _progress, encoding) => {
       const decoder = new BrdTextDecoder(encoding);
       decoder.decode(new Uint8Array(buffer), 0);
@@ -66,7 +80,7 @@ test("explicit encoding reaches the parser, reports bad offsets and clears diagn
   expect(store.getState().scene!.diagnostics).toStrictEqual([]);
 });
 test("replacing a load prevents old completion from overwriting the new board", async () => {
-  const store = createViewerStore(dependencies);
+  const store = createTestStore(dependencies);
   let resolve!: (value: ArrayBuffer) => void;
   const first = store
     .getState()
@@ -80,7 +94,7 @@ test("replacing a load prevents old completion from overwriting the new board", 
   expect(store.getState().progress).toBe(null);
 });
 test("cancel clears loading immediately and rejects late completion; next load recovers", async () => {
-  const store = createViewerStore(dependencies);
+  const store = createTestStore(dependencies);
   let resolve!: (value: ArrayBuffer) => void;
   const pending = store
     .getState()
@@ -94,7 +108,7 @@ test("cancel clears loading immediately and rejects late completion; next load r
   expect(store.getState().file?.name).toBe("recovered");
 });
 test("display updates preserve geometry identity and load resets board-specific selection and flip", async () => {
-  const store = createViewerStore(dependencies);
+  const store = createTestStore(dependencies);
   await store.getState().open(source("board"));
   expect(store.getState().display.boardText).toBe(false);
   store.getState().setDisplay((d) => ({
@@ -113,7 +127,7 @@ test("display updates preserve geometry identity and load resets board-specific 
   expect(!store.getState().display.hidden.has(3)).toBeTruthy();
 });
 test("net color is the initial mode and restored for each new board", async () => {
-  const store = createViewerStore(dependencies);
+  const store = createTestStore(dependencies);
   expect(store.getState().colorMode).toBe("net");
   await store.getState().open(source("board"));
   store.getState().setColorMode("layer");
@@ -123,7 +137,7 @@ test("net color is the initial mode and restored for each new board", async () =
   expect(store.getState().colorMode).toBe("net");
 });
 test("load failures are displayed and do not retain loading state", async () => {
-  const store = createViewerStore({
+  const store = createTestStore({
     ...dependencies,
     parseBrd: async () => {
       throw Error("bad input");
@@ -136,14 +150,14 @@ test("load failures are displayed and do not retain loading state", async () => 
 });
 
 test("loading remains pending until presentation completes and cancellation rejects late GPU completion", async () => {
-  const store = createViewerStore(dependencies);
+  const store = createTestStore(dependencies);
   let finish!: () => void, started!: () => void, signal!: AbortSignal;
   const ready = new Promise<void>((r) => (started = r));
   const pending = store.getState().open(source("gpu"), {
     clear() {},
     prepare: async (_scene, s, progress) => {
       signal = s;
-      progress("上传板图");
+      progress({ phase: "上传板图", fraction: 0.85 });
       started();
       await new Promise<void>((r) => (finish = r));
     },
@@ -166,7 +180,7 @@ test("loading remains pending until presentation completes and cancellation reje
 });
 
 test("presentation failure is reported without publishing a half-loaded scene", async () => {
-  const store = createViewerStore(dependencies);
+  const store = createTestStore(dependencies);
   await store.getState().open(source("failure"), {
     clear() {},
     prepare: async () => {
@@ -201,7 +215,7 @@ for (const action of ["cancel", "replace"] as const)
       armed = true,
       replacement: Promise<void> | undefined,
       timer: ReturnType<typeof setTimeout> | undefined;
-    const store = createViewerStore({
+    const store = createTestStore({
       ...dependencies,
       buildScene: async () => next,
     });

@@ -4,7 +4,7 @@ import { CopperMesh } from "../../src/lib/board/copper-mesh";
 import type { Point } from "../../src/lib/board/model";
 import { ZoneShape } from "../../src/lib/board/shapes/zone";
 
-import { ViewCulling } from "../../src/lib/render/view-culling";
+import { visibleCopperRanges } from "../../src/lib/render/view-culling";
 
 test("independent copper contours retain coordinates and separate exterior from void coverage", async () => {
   const rings: Point[][] = [
@@ -129,7 +129,7 @@ test("spatial hole ranges are complete, conservative, and merge at board fit", a
   }
   expect(end).toBe(mesh.indices.length);
   expect([
-    ...ViewCulling.visibleCopperRanges(mesh.holeChunks, {
+    ...visibleCopperRanges(mesh.holeChunks, {
       minX: 0,
       minY: 0,
       maxX: 100,
@@ -139,7 +139,7 @@ test("spatial hole ranges are complete, conservative, and merge at board fit", a
     { start: mesh.outerCount, count: mesh.indices.length - mesh.outerCount },
   ]);
   const visible = [
-    ...ViewCulling.visibleCopperRanges(mesh.holeChunks, {
+    ...visibleCopperRanges(mesh.holeChunks, {
       minX: 0,
       minY: 0,
       maxX: 10,
@@ -151,7 +151,7 @@ test("spatial hole ranges are complete, conservative, and merge at board fit", a
       (mesh.indices.length - mesh.outerCount) / 2,
   ).toBeTruthy();
   expect([
-    ...ViewCulling.visibleCopperRanges(mesh.holeChunks, {
+    ...visibleCopperRanges(mesh.holeChunks, {
       minX: 200,
       minY: 200,
       maxX: 210,
@@ -161,7 +161,7 @@ test("spatial hole ranges are complete, conservative, and merge at board fit", a
   // A view touching a hole boundary must retain it (conservative comparison).
   expect(
     [
-      ...ViewCulling.visibleCopperRanges(mesh.holeChunks, {
+      ...visibleCopperRanges(mesh.holeChunks, {
         minX: 3,
         minY: 3,
         maxX: 3,

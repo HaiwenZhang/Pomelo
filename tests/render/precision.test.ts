@@ -1,11 +1,14 @@
 import { test, expect } from "vitest";
 
-import { PositionPrecision } from "../../src/lib/render/position-precision";
+import {
+  splitPositions,
+  splitPositionSteps,
+} from "../../src/lib/render/position-precision";
 
 test("split positions retain subpixel differences lost at board-scale float32 coordinates", () => {
   const scale = 1e7,
     positions = [137.123456789, -84.789123456, 137.123456889, -84.789123556];
-  const split = PositionPrecision.split(positions, 2, 2);
+  const split = splitPositions(positions, 2, 2);
   expect(split.data[0]).toBe(split.data[2]);
   expect(split.data[1]).toBe(split.data[3]);
   for (let i = 0; i < positions.length; i++)
@@ -30,11 +33,7 @@ test("static endpoint, triangle and glyph records keep attributes separate from 
     const input = Array.from({ length: stride * 2 }, (_, i) =>
       i % stride < components ? 150.123456789 + i * 0.0000001 : 0.7,
     );
-    const { data, residual } = PositionPrecision.split(
-      input,
-      stride,
-      components,
-    );
+    const { data, residual } = splitPositions(input, stride, components);
     expect(residual.length).toBe(components * 2);
     expect(data.length).toBe(input.length);
     for (let record = 0; record < 2; record++)
@@ -67,7 +66,7 @@ test("large position tails pause without exposing incomplete buffers and can be 
       return Reflect.get(target, key);
     },
   });
-  const steps = PositionPrecision.splitSteps(input, 12, 4);
+  const steps = splitPositionSteps(input, 12, 4);
   expect(steps.next()).toStrictEqual({ value: undefined, done: false });
   const first = reads;
   expect(first, "native data copy followed by bounded residual work").toBe(
@@ -79,7 +78,7 @@ test("large position tails pause without exposing incomplete buffers and can be 
   const stopped = reads;
   expect(steps.next().done).toBe(true);
   expect(reads).toBe(stopped);
-  const retry = PositionPrecision.split(source, 12, 4);
+  const retry = splitPositions(source, 12, 4);
   expect(retry.data.length).toBe(source.length);
   expect(retry.residual.length).toBe(8192 * 4);
   for (const record of [0, 2047, 2048, 8191])

@@ -1,6 +1,7 @@
 import { test, expect } from "vitest";
 
-import type { Raw } from "../../src/lib/allegro/binary/reader";
+import type { RawRecord } from "../../src/lib/allegro/binary/record-types";
+type Raw = RawRecord & { type: number };
 import { AllegroBondFingerDecoder } from "../../src/lib/allegro/decoders/bond-finger";
 import type { BoardScene, Via } from "../../src/lib/board/model";
 

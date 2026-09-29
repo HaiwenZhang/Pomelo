@@ -1,6 +1,9 @@
 import { test, expect } from "vitest";
 
-import { ArcBatchBuilder } from "../../src/lib/render/arc-batch-builder";
+import {
+  buildArcBatches,
+  buildArcBatchSteps,
+} from "../../src/lib/render/arc-batch-builder";
 
 test("arc packets retain real radius, endpoint, width and bounds precision", () => {
   const center = [-958.8637160024715, -1716.2719675042774],
@@ -24,7 +27,7 @@ test("arc packets retain real radius, endpoint, width and bounds precision", () 
     1,
     ...straight,
   ];
-  const batches = ArcBatchBuilder.build({ layer: 3, category: "etch" }, input);
+  const batches = buildArcBatches({ layer: 3, category: "etch" }, input);
   expect(batches.length).toBe(2);
   expect([...batches[0].data]).toStrictEqual(
     new Array(2).fill(straight).flat().map(Math.fround),
@@ -54,7 +57,7 @@ test("arc packets retain real radius, endpoint, width and bounds precision", () 
 
 test("outline arcs retain display metadata and full/major/zero sweep distinctions", () => {
   for (const sweep of [0, Math.PI, Math.PI * 1.5, -Math.PI * 2]) {
-    const [arc] = ArcBatchBuilder.build(
+    const [arc] = buildArcBatches(
       { layer: 2, category: "pin", padMode: "outline" },
       [0, 0, 3, 1, 0, sweep, 1, 0, 1, 1, 1, 1],
     );
@@ -90,14 +93,14 @@ test("large curve preparation can close during counting or conversion without re
     },
   });
   const meta = { layer: 3, category: "etch" as const };
-  const counting = ArcBatchBuilder.buildSteps(meta, input);
+  const counting = buildArcBatchSteps(meta, input);
   expect(counting.next().done).toBe(false);
   expect(reads).toBe(2048);
   counting.return([]);
   expect(counting.next().done).toBe(true);
   expect(reads).toBe(2048);
   reads = 0;
-  const converting = ArcBatchBuilder.buildSteps(meta, input);
+  const converting = buildArcBatchSteps(meta, input);
   for (let i = 0; i < count / 2048; i++)
     expect(converting.next().done).toBe(false);
   expect(reads, "only tags read before conversion").toBe(count);
@@ -107,7 +110,7 @@ test("large curve preparation can close during counting or conversion without re
   converting.return([]);
   expect(converting.next().done).toBe(true);
   expect(reads).toBe(partial);
-  const [retry] = ArcBatchBuilder.build(meta, source);
+  const [retry] = buildArcBatches(meta, source);
   expect(retry.data.length).toBe(count * 20);
   expect(retry.residual.length).toBe(count * 12);
   for (const i of [0, 511, 512, count - 1]) {
@@ -138,16 +141,16 @@ test("interleaved curve conversions and cancellation cannot overwrite another ge
     ]).flat();
   const a = input(10000),
     b = input(-20000),
-    expected = ArcBatchBuilder.build(meta, a);
-  const left = ArcBatchBuilder.buildSteps(meta, a),
-    right = ArcBatchBuilder.buildSteps(meta, b);
+    expected = buildArcBatches(meta, a);
+  const left = buildArcBatchSteps(meta, a),
+    right = buildArcBatchSteps(meta, b);
   // Pass counting and suspend both converters after the first 512 records.
   for (let i = 0; i < 3; i++) {
     expect(left.next().done).toBe(false);
     expect(right.next().done).toBe(false);
   }
   right.return([]);
-  const other = ArcBatchBuilder.build(meta, b);
+  const other = buildArcBatches(meta, b);
   let step = left.next();
   while (!step.done) step = left.next();
   expect(step.value).toStrictEqual(expected);
@@ -155,7 +158,7 @@ test("interleaved curve conversions and cancellation cannot overwrite another ge
     data: batch.data.slice(),
     residual: batch.residual.slice(),
   }));
-  ArcBatchBuilder.build(meta, a);
+  buildArcBatches(meta, a);
   expect(other.map(({ data, residual }) => ({ data, residual }))).toStrictEqual(
     saved,
   );

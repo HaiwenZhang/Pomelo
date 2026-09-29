@@ -2,8 +2,8 @@ import type { Bounds, Point, Zone } from "../board/model";
 import { ZoneShape } from "../board/shapes/zone";
 
 import type { IDisposable } from "../disposable";
-import { CurveTessellator } from "./curve-tessellator";
-import { PositionPrecision } from "./position-precision";
+import { tessellateCurveRing } from "./curve-tessellator";
+import { splitPositions } from "./position-precision";
 
 const contains = (a: Bounds, b: Bounds) =>
   a.minX <= b.minX && a.maxX >= b.maxX && a.minY <= b.minY && a.maxY >= b.maxY;
@@ -179,11 +179,7 @@ export class CurveFillLayer implements IDisposable {
       ] as Point[])
         vertex(p);
       for (const i of [0, ...new ZoneShape(zone).holeCandidates(cachedView)]) {
-        const ring = CurveTessellator.ring(
-            zone.paths[i],
-            cachedView,
-            tolerance,
-          ),
+        const ring = tessellateCurveRing(zone.paths[i], cachedView, tolerance),
           start = vertices.length / 2;
         for (let j = 1; j + 1 < ring.length; j++) {
           vertex(ring[0]);
@@ -211,7 +207,7 @@ export class CurveFillLayer implements IDisposable {
             ),
           });
       }
-      const split = PositionPrecision.split(vertices, 2, 2),
+      const split = splitPositions(vertices, 2, 2),
         data = this.buffer(split.data);
       let low: GPUBuffer;
       try {

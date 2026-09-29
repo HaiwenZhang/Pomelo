@@ -1,4 +1,5 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type { RawRecord } from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x38 */
 export function readFilm(reader: Reader, formatVersion: number): RawRecord {

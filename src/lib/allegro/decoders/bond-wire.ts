@@ -1,11 +1,17 @@
+import { lookupString } from "../binary/string-table";
 import type { BondWireInfo } from "../../board/model";
 import { PointShape } from "../../board/shapes/point";
-import type { Raw } from "../binary/reader";
+import {
+  isRecordType,
+  lookupRecord,
+  type AllegroRecord,
+  type RecordLookup,
+} from "../binary/record-types";
 import { AllegroBondFingerDecoder } from "./bond-finger";
 import { AllegroPadstackResolver } from "./padstack";
 export class AllegroBondWireResolver {
   constructor(
-    readonly get: (id: number) => Raw | undefined,
+    readonly get: RecordLookup,
     readonly strings: ReadonlyMap<number, string>,
     readonly version: number,
     readonly layerCount: number,
@@ -13,9 +19,9 @@ export class AllegroBondWireResolver {
   /** Native camera: a 2D wire from a BOND TOP die pin to a TOP bond finger.
    * Profile names come from the attribute chain, not the physical layer array.
    * Unknown endpoint/profile/segment variants stay diagnostic in the caller. */
-  resolve(track: Raw):
+  resolve(track: unknown):
     | {
-        segment: Raw;
+        segment: AllegroRecord<0x16>;
         wire: BondWireInfo;
         net: number;
       }
@@ -26,15 +32,15 @@ export class AllegroBondWireResolver {
     const layerCount = this.layerCount;
     if (
       version < 172 ||
-      track.type !== 5 ||
+      !isRecordType(track, 5) ||
       track.Layer !== 0xfd06 ||
       track.UnknownPtr1 !== 160
     )
       return;
-    const pin = get(track.Unknown4),
-      finger = get(track.Unknown5a),
-      fp = get(track.UnknownPtr2a),
-      segment = get(track.FirstSegPtr);
+    const pin = lookupRecord(get, track.Unknown4, 0x32),
+      finger = lookupRecord(get, track.Unknown5a, 0x33),
+      fp = lookupRecord(get, track.UnknownPtr2a, 0x2d),
+      segment = lookupRecord(get, track.FirstSegPtr, 0x16);
     if (
       pin?.type !== 0x32 ||
       finger?.type !== 0x33 ||
@@ -59,9 +65,9 @@ export class AllegroBondWireResolver {
       ].every(Number.isFinite)
     )
       return;
-    const pad = get(pin.PadPtr),
-      fingerStack = get(finger.Padstack),
-      assignment = get(track.NetAssignment);
+    const pad = lookupRecord(get, pin.PadPtr, 0x0d),
+      fingerStack = lookupRecord(get, finger.Padstack, 0x1c),
+      assignment = lookupRecord(get, track.NetAssignment, 0x04);
     if (
       !pad ||
       !new AllegroPadstackResolver(get, layerCount, version).resolvePin(
@@ -76,8 +82,8 @@ export class AllegroBondWireResolver {
       fingerStack.StartLayer !== 0 ||
       assignment?.type !== 4 ||
       !assignment.Net ||
-      get(pin.NetPtr)?.Net !== assignment.Net ||
-      get(finger.NetPtr)?.Net !== assignment.Net
+      lookupRecord(get, pin.NetPtr, 0x04)?.Net !== assignment.Net ||
+      lookupRecord(get, finger.NetPtr, 0x04)?.Net !== assignment.Net
     )
       return;
     if (
@@ -106,13 +112,15 @@ export class AllegroBondWireResolver {
       if (seen.has(id)) return;
       seen.add(id);
       const field = get(id);
-      if (field?.type !== 3) return;
+      if (!isRecordType(field, 3)) return;
       if (field.Hdr1 === 400 && field.SubType === 104) {
         if (profile !== undefined) return;
+        if (typeof field.Value !== "string") return;
         profile = field.Value;
       }
       if (field.Hdr1 === 540 && field.SubType === 104) {
         if (material !== undefined) return;
+        if (typeof field.Value !== "string") return;
         material = field.Value;
       }
       id = field.Next;
@@ -123,7 +131,7 @@ export class AllegroBondWireResolver {
       (material !== undefined && typeof material !== "string")
     )
       return;
-    const component = get(fp.InstRef);
+    const component = lookupRecord(get, fp.InstRef, 0x07);
     return {
       segment,
       net: assignment.Net,
@@ -133,8 +141,10 @@ export class AllegroBondWireResolver {
         sourcePin: pin.Key,
         finger: finger.Key,
         reference:
-          component?.RefDes ?? strings.get(component?.RefDesStrPtr) ?? "",
-        pinName: pad.Name ?? strings.get(pad.NameStrId) ?? "",
+          component?.RefDes ??
+          lookupString(strings, component?.RefDesStrPtr) ??
+          "",
+        pinName: pad.Name ?? lookupString(strings, pad.NameStrId) ?? "",
       },
     };
   }

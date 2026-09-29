@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, expectTypeOf, test } from "vitest";
 import { BrdDatabase } from "../../src/lib/allegro/database";
 import type { BrdHeader } from "../../src/lib/allegro/binary/header";
 
@@ -21,6 +21,13 @@ test.each([152, 174])(
     const a = db.records(0x15),
       b = db.records(0x15);
     const first = a.next().value!;
+    expectTypeOf(first.StartX).toEqualTypeOf<number>();
+    expect(db.get(1, 0x15)?.StartX).toBe(-100);
+    expect(db.get(1, 0x33)).toBeUndefined();
+    expect(db.get(undefined, 0x15)).toBeUndefined();
+    // @ts-expect-error Known records reject misspelled fields.
+    expect(first.StartXX).toBeUndefined();
+    expectTypeOf(first.type).toEqualTypeOf<0x15>();
     expect(db.get(3)?.StartX).toBe(-102);
     expect(b.next().value!.Key).toBe(1);
     expect(a.next().value!.Key).toBe(2);

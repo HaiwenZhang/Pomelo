@@ -9,7 +9,7 @@ import type { Camera } from "../interaction/camera";
 import type { BoardObject, PickHit, Selection } from "../interaction/picking";
 import type { ColorMode } from "./color-mode";
 import type { AreaLabelIndex } from "./area-label-index";
-import { ViewCulling } from "./view-culling";
+import { boundsOverlap, visibleCopperRanges } from "./view-culling";
 import { DrawBundleCache } from "./draw-bundle-cache";
 import { LabelLayoutCache } from "./label-layout-cache";
 import type { TrackLabelIndex } from "./track-label-index";
@@ -188,8 +188,7 @@ export class WebGPUFrame implements IDisposable {
           )
             continue;
           for (const zone of batch.zones ?? []) {
-            if (zone.bounds && !ViewCulling.overlaps(zone.bounds, view))
-              continue;
+            if (zone.bounds && !boundsOverlap(zone.bounds, view)) continue;
             const source = state.zoneById.get(zone.id);
             if (
               !source ||
@@ -316,7 +315,7 @@ export class WebGPUFrame implements IDisposable {
       frameRenderer.bundles.draw(pass, batch, pipeline, bind, ranges, cache);
     }
     function copper(batch: GpuBatch, fill: GPUBindGroup, annotate = false) {
-      if (batch.bounds && !ViewCulling.overlaps(batch.bounds, view)) return;
+      if (batch.bounds && !boundsOverlap(batch.bounds, view)) return;
       let solidStart = 0,
         solidCount = 0;
       const flushSolid = () => {
@@ -328,7 +327,7 @@ export class WebGPUFrame implements IDisposable {
         }
       };
       for (const zone of batch.zones ?? []) {
-        if (zone.bounds && !ViewCulling.overlaps(zone.bounds, view)) continue;
+        if (zone.bounds && !boundsOverlap(zone.bounds, view)) continue;
         const source =
           frameRenderer.camera.scale * devicePixelRatio > 1000
             ? state.zoneById.get(zone.id)
@@ -384,10 +383,7 @@ export class WebGPUFrame implements IDisposable {
         if (zone.count > outer) {
           pass.setStencilReference(0);
           if (batch.holeChunks)
-            for (const range of ViewCulling.visibleCopperRanges(
-              batch.holeChunks,
-              view,
-            ))
+            for (const range of visibleCopperRanges(batch.holeChunks, view))
               polygon(batch, range.count, range.start);
           else polygon(batch, zone.count - outer, zone.start + outer);
         }

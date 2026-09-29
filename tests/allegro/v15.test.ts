@@ -5,6 +5,7 @@ import {
 } from "../../src/lib/allegro/binary/header";
 import { Reader } from "../../src/lib/allegro/binary/reader";
 import { AllegroRecordReader } from "../../src/lib/allegro/binary/record-reader";
+import type { PadstackRecord } from "../../src/lib/allegro/binary/records/padstacks";
 import { AllegroParser } from "../../src/lib/allegro/parser";
 
 const header = { version: 152 } as BrdHeader;
@@ -210,6 +211,6 @@ test.each([0, 1])(
     expect(reader.offset).toBe(size);
     expect(value.StartLayer).toBe(flag ? 2 : 0);
     expect(value.LayerCount).toBe(flag ? 1 : 4);
-    expect(value.Components[flag ? 12 : 18].W).toBe(500);
+    expect((value as PadstackRecord).Components[flag ? 12 : 18].W).toBe(500);
   },
 );

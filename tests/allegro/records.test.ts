@@ -256,7 +256,7 @@ for (const version of [160, 162, 164, 165, 166])
     expect(d.Components[fixed + 2].ShapePtr).toBe(567);
     expect(d.Components[fixed + 2].OffsetX).toBe(-100);
     expect(d.Components[fixed + 2].Z1).toBe(0);
-    expect(d.Components.at(-1).ShapePtr).toBe(789);
+    expect(d.Components.at(-1)!.ShapePtr).toBe(789);
     expect(d.DrillSize).toBe(300);
     expect(d.SlotY).toBe(900);
     expect(r.offset).toBe(end);

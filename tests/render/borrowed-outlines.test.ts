@@ -2,7 +2,7 @@ import { test, expect } from "vitest";
 import type { BoardScene } from "../../src/lib/board/model";
 import type { Zone } from "../../src/lib/board/model";
 
-import { BorrowedOutlineCollector } from "../../src/lib/render/borrowed-outline-collector";
+import { collectBorrowedOutlines } from "../../src/lib/render/borrowed-outline-collector";
 import { PrimitiveBatchBuilder } from "../../src/lib/render/primitive-batch-builder";
 
 test("borrowed outlines retain line-before-arc order and merge only contiguous selected ranges", () => {
@@ -28,16 +28,16 @@ test("borrowed outlines retain line-before-arc order and merge only contiguous s
     ],
   ]);
   const original = structuredClone([...index]);
-  const result = [
-    ...BorrowedOutlineCollector.collectSteps([1, 2, 3, 5], index),
-  ].filter(Boolean);
+  const result = [...collectBorrowedOutlines([1, 2, 3, 5], index)].filter(
+    Boolean,
+  );
   expect(result).toStrictEqual([
     { batch: line, start: 0, count: 10 },
     { batch: line, start: 12, count: 7 },
     { batch: arc, start: 0, count: 6 },
   ]);
   expect([...index]).toStrictEqual(original);
-  const steps = BorrowedOutlineCollector.collectSteps(
+  const steps = collectBorrowedOutlines(
     Array.from({ length: 1000 }, () => 2),
     index,
   );

@@ -1,5 +1,6 @@
 import { test, expect } from "vitest";
-import type { Raw } from "../../src/lib/allegro/binary/reader";
+import type { RawRecord } from "../../src/lib/allegro/binary/record-types";
+type Raw = RawRecord & { type: number };
 import { AllegroPadstackResolver } from "../../src/lib/allegro/decoders/padstack";
 
 test("embedded pad resolves its reference stack and absolute inner layer", () => {

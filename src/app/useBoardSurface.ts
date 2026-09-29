@@ -104,7 +104,14 @@ export function useBoardSurface(encoding: BrdTextEncoding) {
             );
             surface.setColorMode(viewerStore.getState().colorMode);
             surface.setFlipped(false);
-            return surface.prepareScene(scene, signal, progress);
+            return surface.prepareScene(scene, signal, ({ phase, fraction }) =>
+              progress({
+                phase,
+                ...(fraction === undefined
+                  ? {}
+                  : { fraction: 0.7 + fraction * 0.3 }),
+              }),
+            );
           },
         },
         encoding,

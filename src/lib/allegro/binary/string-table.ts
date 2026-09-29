@@ -37,3 +37,11 @@ export class AllegroStringTableReader {
     return { strings, objectOffset: r.offset };
   }
 }
+
+/** Resolve a version-specific string reference without treating a missing ID as zero. */
+export function lookupString(
+  strings: ReadonlyMap<number, string>,
+  id: number | undefined,
+) {
+  return id === undefined ? undefined : strings.get(id);
+}

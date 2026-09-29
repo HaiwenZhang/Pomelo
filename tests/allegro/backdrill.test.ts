@@ -1,6 +1,7 @@
 import { test, expect } from "vitest";
 
-import type { Raw } from "../../src/lib/allegro/binary/reader";
+import type { RawRecord } from "../../src/lib/allegro/binary/record-types";
+type Raw = RawRecord & { type: number };
 import { AllegroPadstackResolver } from "../../src/lib/allegro/decoders/padstack";
 import type { BoardScene, PadShape, Via } from "../../src/lib/board/model";
 import { BackdrillShape } from "../../src/lib/board/shapes/backdrill";
@@ -105,7 +106,15 @@ const cases = [
   },
 ];
 function records(c = cases[0]) {
-  const circle = (size: number) => ({
+  const circle = (
+    size: number,
+  ): {
+    Type: number;
+    W?: number;
+    H?: number;
+    OffsetX?: number;
+    OffsetY?: number;
+  } => ({
     Type: 2,
     W: size,
     H: size,
@@ -118,7 +127,7 @@ function records(c = cases[0]) {
   components[5] = circle(c.start);
   components[14] = circle(7777);
   components[15] = circle(8888);
-  const stack: Raw = {
+  const stack = {
     type: 28,
     Key: 51424,
     StartLayer: 0,
@@ -131,13 +140,13 @@ function records(c = cases[0]) {
     Components: components,
     DrillMetadataWords: [...c.metadata],
   };
-  const wrapper: Raw = {
+  const wrapper = {
     type: 47,
     Type: 0,
     T2: 0,
     UnknownArray: [51424, 93381, c.layers, 2788826, c.encoded, 32],
   };
-  const map = new Map([
+  const map = new Map<number, Raw>([
       [51424, stack],
       [2383683, wrapper],
     ]),
@@ -210,6 +219,7 @@ test("unknown metadata layout and unsupported geometry stay diagnostic", () => {
 });
 test("padstack wrapper rejects non-numeric opaque words", () => {
   const r = records();
+  // @ts-expect-error Deliberately malformed decoded word exercises runtime validation.
   r.wrapper.UnknownArray[3] = "opaque";
   expect(r.resolve()).toBe(undefined);
 });

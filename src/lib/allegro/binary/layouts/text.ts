@@ -1,11 +1,12 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type { TextWrapperBody, RawRecord } from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x30 */
 export function readTextWrapper(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): TextWrapperBody {
+  const record: Partial<TextWrapperBody> = {};
   record.Type = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -18,7 +19,7 @@ export function readTextWrapper(
     record.CoordsY = reader.u32();
     record.StrGraphicPtr = reader.u32();
     record.PtrGroup_16x = reader.u32();
-    return record;
+    return record as TextWrapperBody;
   }
   if (formatVersion >= 172) {
     record.Unknown1 = reader.u32();
@@ -47,5 +48,5 @@ export function readTextWrapper(
   if (formatVersion < 172) {
     record.PtrGroup_16x = reader.u32();
   }
-  return record;
+  return record as TextWrapperBody;
 }

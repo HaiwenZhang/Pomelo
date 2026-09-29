@@ -1,4 +1,10 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type { PointerArrayBody } from "../record-types";
+import type {
+  HatchLinkBody,
+  PadstackReferenceBody,
+  RawRecord,
+} from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x0a */
 export function readDesignRuleCheck(
@@ -49,8 +55,8 @@ export function readCrossReference(
 export function readUnknownRecord0x20(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): HatchLinkBody {
+  const record: Partial<HatchLinkBody> = {};
   record.Type = reader.u8();
   record.R = reader.u16();
   record.Key = reader.u32();
@@ -59,7 +65,7 @@ export function readUnknownRecord0x20(
   if (formatVersion >= 174) {
     record.UnknownArray2 = reader.u32(10);
   }
-  return record;
+  return record as HatchLinkBody;
 }
 
 /** 0x22 */
@@ -123,13 +129,13 @@ export function readTable(reader: Reader, formatVersion: number): RawRecord {
 }
 
 /** 0x2f */
-export function readUnknownRecord0x2f(reader: Reader): RawRecord {
-  const record: RawRecord = {};
+export function readUnknownRecord0x2f(reader: Reader): PadstackReferenceBody {
+  const record: Partial<PadstackReferenceBody> = {};
   record.Type = reader.u8();
   record.T2 = reader.u16();
   record.Key = reader.u32();
   record.UnknownArray = reader.u32(6);
-  return record;
+  return record as PadstackReferenceBody;
 }
 
 /** 0x35 */
@@ -145,8 +151,8 @@ export function readFileReference(reader: Reader): RawRecord {
 export function readPointerArray(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): PointerArrayBody {
+  const record: Partial<PointerArrayBody> = {};
   record.T = reader.u8();
   record.T2 = reader.u16();
   record.Key = reader.u32();
@@ -159,7 +165,7 @@ export function readPointerArray(
     record.Unknown3 = reader.u32();
   }
   record.Ptrs = reader.u32(100);
-  return record;
+  return record as PointerArrayBody;
 }
 
 /** 0x3e */

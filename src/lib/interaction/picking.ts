@@ -14,7 +14,7 @@ import { DrillShape } from "../board/shapes/drill";
 import { LineShape } from "../board/shapes/line";
 import type { PadPlacement } from "../board/shapes/pad";
 import { PadShape as PadShapeGeometry } from "../board/shapes/pad";
-import { PinShape } from "../board/shapes/pin";
+import { pinDisplayCategory } from "../board/shapes/pin";
 import { SegmentShape } from "../board/shapes/segment";
 import { ViaShape } from "../board/shapes/via";
 import { ZoneShape } from "../board/shapes/zone";
@@ -318,8 +318,7 @@ export class BoardIndex {
           const entry: Entry = {
             object,
             layer: pad.layer,
-            category:
-              "shapes" in value ? new PinShape(value).displayCategory() : "via",
+            category: "shapes" in value ? pinDisplayCategory(value) : "via",
             bounds: sharedPadBounds(
               pad,
               value,

@@ -1,3 +1,4 @@
+import type { ProgressReporter } from "../progress";
 import type { BoardScene } from "../board/model";
 import { BoardIndex } from "../interaction/picking";
 import { StrokeFont } from "../text/stroke-font";
@@ -46,26 +47,26 @@ export class ScenePreparation {
   async prepare(
     source: BoardScene,
     signal: AbortSignal,
-    progress?: (phase: string) => void,
+    progress?: ProgressReporter,
   ) {
     signal.throwIfAborted();
-    progress?.("读取原始文字字形");
+    progress?.({ phase: "读取原始文字字形", fraction: 0 });
     await StrokeFont.prepare(source.texts ?? [], signal);
-    progress?.("构建拾取索引");
+    progress?.({ phase: "构建拾取索引", fraction: 0.15 });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const index = await BoardIndex.create(source, signal);
-    progress?.("构建过孔标注索引");
+    progress?.({ phase: "构建过孔标注索引", fraction: 0.3 });
     const vias = await ViaLabelIndex.create(source.vias, signal);
-    progress?.("构建走线标注索引");
+    progress?.({ phase: "构建走线标注索引", fraction: 0.45 });
     const tracks = await TrackLabelIndex.create(
       source.segments,
       source.nets,
       this.font,
       signal,
     );
-    progress?.("构建焊盘与铜皮标注索引");
+    progress?.({ phase: "构建焊盘与铜皮标注索引", fraction: 0.6 });
     const areas = await AreaLabelIndex.create(source, this.font, signal);
-    progress?.("上传板图");
+    progress?.({ phase: "上传板图", fraction: 0.75 });
     const uploader = new WebGPUBatchUploader(this.device);
     const packets = await uploader.uploadAsync(source, signal, {
       kind: "scene",

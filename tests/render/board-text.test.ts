@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 import type { BrdDatabase } from "../../src/lib/allegro/database";
 import { AllegroLayerDecoder } from "../../src/lib/allegro/decoders/layers";
-import { AllegroTextBuilder } from "../../src/lib/allegro/decoders/text";
+import { AllegroTextBuilder } from "../../src/lib/allegro/scene/text";
 import { AllegroTextRecordDecoder } from "../../src/lib/allegro/decoders/text-record";
 
 import type { BoardText } from "../../src/lib/board/model";

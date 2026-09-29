@@ -1,6 +1,7 @@
 import { test, expect } from "vitest";
 
-import type { Raw } from "../../src/lib/allegro/binary/reader";
+import type { RawRecord } from "../../src/lib/allegro/binary/record-types";
+type Raw = RawRecord & { type: number };
 import { AllegroPadstackResolver } from "../../src/lib/allegro/decoders/padstack";
 
 // Native camera_test_board: (10.6848,-1.6366) and (10.287,-3.175) mm,
@@ -18,13 +19,13 @@ function fixture() {
     SlotX: 0,
     SlotY: 0,
   };
-  const wrapper: Raw = {
+  const wrapper = {
     type: 47,
     Type: 0,
     T2: 0,
     UnknownArray: [640, 115697, 0x20004, 0, 0, 64],
   };
-  const map = new Map([
+  const map = new Map<number, Raw>([
     [640, stack],
     [115696, wrapper],
   ]);

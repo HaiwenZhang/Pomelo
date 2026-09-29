@@ -1,11 +1,17 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type {
+  NetAssignmentBody,
+  TrackBody,
+  NetBody,
+  RawRecord,
+} from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x04 */
 export function readNetAssignment(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): NetAssignmentBody {
+  const record: Partial<NetAssignmentBody> = {};
   record.Type = reader.u8();
   record.R = reader.u16();
   record.Key = reader.u32();
@@ -15,12 +21,12 @@ export function readNetAssignment(
   if (formatVersion >= 174) {
     record.Unknown = reader.u32();
   }
-  return record;
+  return record as NetAssignmentBody;
 }
 
 /** 0x05 */
-export function readTrack(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readTrack(reader: Reader, formatVersion: number): TrackBody {
+  const record: Partial<TrackBody> = {};
   reader.skip(1);
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -43,7 +49,7 @@ export function readTrack(reader: Reader, formatVersion: number): RawRecord {
   record.FirstSegPtr = reader.u32();
   record.UnknownPtr5 = reader.u32();
   record.Unknown6 = reader.u32();
-  return record;
+  return record as TrackBody;
 }
 
 /** 0x09 */
@@ -69,8 +75,8 @@ export function readFillLink(reader: Reader, formatVersion: number): RawRecord {
 }
 
 /** 0x1b */
-export function readNet(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readNet(reader: Reader, formatVersion: number): NetBody {
+  const record: Partial<NetBody> = {};
   reader.skip(3);
   record.Key = reader.u32();
   record.Next = reader.u32();
@@ -88,7 +94,7 @@ export function readNet(reader: Reader, formatVersion: number): RawRecord {
   record.UnknownPtr4 = reader.u32();
   record.UnknownPtr5 = reader.u32();
   record.UnknownPtr6 = reader.u32();
-  return record;
+  return record as NetBody;
 }
 
 /** 0x23 */

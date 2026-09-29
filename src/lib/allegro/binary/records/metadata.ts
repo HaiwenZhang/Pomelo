@@ -1,5 +1,6 @@
 import type { BrdHeader } from "../header";
-import type { Raw as RawRecord, Reader } from "../reader";
+import type { RawRecord } from "../record-types";
+import type { Reader } from "../reader";
 import { parserError } from "../../../parser-error";
 
 /** 0x1a: two linked nets with opaque metadata. */
@@ -51,10 +52,11 @@ export function readConstraintSet(
 export function readBlob(reader: Reader): RawRecord {
   const record: RawRecord = {};
   reader.skip(3);
-  record.Size = reader.u32();
-  if (record.Size < 12) throw parserError("brdInvalidBlobLength");
+  const size = reader.u32();
+  record.Size = size;
+  if (size < 12) throw parserError("brdInvalidBlobLength");
   record.Key = reader.u32();
-  reader.skip(record.Size - 12);
+  reader.skip(size - 12);
   return record;
 }
 
@@ -78,8 +80,9 @@ export function readKeyList(
   reader.skip(3);
   record.Key = reader.u32();
   if (formatVersion >= 174) reader.skip(4);
-  record.NumEntries = reader.u32();
-  if (record.NumEntries > 1e6) throw parserError("brdReferenceListTooLarge");
-  record.Entries = reader.u32(record.NumEntries);
+  const count = reader.u32();
+  record.NumEntries = count;
+  if (count > 1e6) throw parserError("brdReferenceListTooLarge");
+  record.Entries = reader.u32(count);
   return record;
 }

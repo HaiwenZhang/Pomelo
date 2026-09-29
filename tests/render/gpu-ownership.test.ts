@@ -2,7 +2,7 @@ import { test, expect, vi } from "vitest";
 import { GpuGeometry } from "../../src/lib/render/gpu-geometry";
 import { GpuBatchSet } from "../../src/lib/render/gpu-batch-set";
 import type { GpuBatch } from "../../src/lib/render/webgpu-batch-uploader";
-import { LatestTask } from "../../src/lib/render/latest-task";
+import { LatestTask } from "../../src/lib/latest-task";
 
 test("range views do not own allocations; owner destruction invalidates sorted and shared views", () => {
   const destroy = vi.fn(),

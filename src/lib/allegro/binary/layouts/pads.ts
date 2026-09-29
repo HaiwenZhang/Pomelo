@@ -1,4 +1,10 @@
-import type { Raw as RawRecord, Reader } from "../reader";
+import type {
+  PadBody,
+  PlacedPadBody,
+  ViaBody,
+  RawRecord,
+} from "../record-types";
+import type { Reader } from "../reader";
 
 /** 0x08 */
 export function readPinNumber(
@@ -68,8 +74,8 @@ export function readPinDefinition(
 }
 
 /** 0x0d */
-export function readPad(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readPad(reader: Reader, formatVersion: number): PadBody {
+  const record: Partial<PadBody> = {};
   reader.skip(3);
   record.Key = reader.u32();
   if (formatVersion < 160) record.Name = reader.str(32);
@@ -87,7 +93,7 @@ export function readPad(reader: Reader, formatVersion: number): RawRecord {
   }
   record.Flags = reader.u32();
   record.Rotation = reader.u32();
-  return record;
+  return record as PadBody;
 }
 
 /** 0x11 */
@@ -132,8 +138,8 @@ export function readPin(reader: Reader): RawRecord {
 export function readPlacedPad(
   reader: Reader,
   formatVersion: number,
-): RawRecord {
-  const record: RawRecord = {};
+): PlacedPadBody {
+  const record: Partial<PlacedPadBody> = {};
   record.Type = reader.u8();
   record.Layer = reader.u16();
   record.Key = reader.u32();
@@ -157,12 +163,12 @@ export function readPlacedPad(
   record.NameText = reader.u32();
   record.Ptr11 = reader.u32();
   record.Coords = reader.i32(4);
-  return record;
+  return record as PlacedPadBody;
 }
 
 /** 0x33 */
-export function readVia(reader: Reader, formatVersion: number): RawRecord {
-  const record: RawRecord = {};
+export function readVia(reader: Reader, formatVersion: number): ViaBody {
+  const record: Partial<ViaBody> = {};
   reader.skip(1);
   record.LayerInfo = reader.u16();
   record.Key = reader.u32();
@@ -185,5 +191,5 @@ export function readVia(reader: Reader, formatVersion: number): RawRecord {
   record.Unknown4 = reader.u32();
   record.Unknown5 = reader.u32();
   record.BoundingBoxCoords = reader.i32(4);
-  return record;
+  return record as ViaBody;
 }

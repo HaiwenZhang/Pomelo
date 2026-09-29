@@ -1,4 +1,10 @@
-import type { Raw as RawRecord, Reader } from "./reader";
+import type {
+  FootprintInstanceBody,
+  KnownRecordType,
+  RecordBodies,
+  RawRecord,
+} from "./record-types";
+import type { Reader } from "./reader";
 import * as geometry from "./layouts/geometry";
 import * as components from "./layouts/components";
 import * as pads from "./layouts/pads";
@@ -7,7 +13,7 @@ import * as text from "./layouts/text";
 import * as films from "./layouts/films";
 import * as metadata from "./layouts/metadata";
 
-type FixedLayoutDecoder = (reader: Reader, formatVersion: number) => RawRecord;
+type FixedLayoutDecoder = (reader: Reader, formatVersion: number) => object;
 
 const FIXED_LAYOUT_DECODERS = new Map<number, FixedLayoutDecoder>([
   // Geometry
@@ -73,8 +79,12 @@ export class AllegroFixedLayoutReader {
   ) {}
 
   /** Unsupported types return undefined without consuming any bytes. */
-  read(recordType: number): RawRecord | undefined {
+  read<T extends KnownRecordType>(
+    recordType: T,
+  ): (T extends 0x2d ? FootprintInstanceBody : RecordBodies[T]) | undefined;
+  read(recordType: number): RawRecord | undefined;
+  read(recordType: number): object | undefined {
     const decodeRecord = FIXED_LAYOUT_DECODERS.get(recordType);
-    return decodeRecord?.(this.reader, this.version);
+    return decodeRecord?.(this.reader, this.version) as RawRecord | undefined;
   }
 }

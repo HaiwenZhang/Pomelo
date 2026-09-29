@@ -6,8 +6,8 @@ import { BoardDisplay } from "../../src/lib/board/display";
 import type { BoardScene } from "../../src/lib/board/model";
 
 import { BoardTextStrokeBuilder } from "../../src/lib/text/board-text-stroke-builder";
-import { BoardTextBatchBuilder } from "../../src/lib/render/board-text-batch-builder";
-import { PositionPrecision } from "../../src/lib/render/position-precision";
+import { buildBoardTextBatches } from "../../src/lib/render/board-text-batch-builder";
+import { splitPositions } from "../../src/lib/render/position-precision";
 
 const scene: BoardScene = {
   layers: [{ id: 0, name: "TOP", color: "#548abc" }],
@@ -53,7 +53,7 @@ test("original board text is hidden by default and can be enabled", () => {
     BoardDisplay.isBatchVisible(display, { layer: 0, category: "text" }),
   ).toBe(false);
   expect(
-    [...BoardTextBatchBuilder.buildSteps(scene, display)].filter(Boolean),
+    [...buildBoardTextBatches(scene, display)].filter(Boolean),
   ).toHaveLength(0);
   expect(
     BoardDisplay.isBatchVisible(
@@ -63,7 +63,7 @@ test("original board text is hidden by default and can be enabled", () => {
   ).toBe(true);
   expect(
     [
-      ...BoardTextBatchBuilder.buildSteps(scene, {
+      ...buildBoardTextBatches(scene, {
         ...display,
         boardText: true,
       }),
@@ -99,15 +99,15 @@ test("bounded text batches preserve every legacy vertex, residual, color and lay
         1,
       );
   }
-  const batches = [
-    ...BoardTextBatchBuilder.buildSteps(scene, undefined, 13),
-  ].filter((b) => !!b);
+  const batches = [...buildBoardTextBatches(scene, undefined, 13)].filter(
+    (b) => !!b,
+  );
   expect(batches.length > 20).toBeTruthy();
   expect([...new Set(batches.map((b) => b.layer))]).toStrictEqual([
     ...reference.keys(),
   ]);
   for (const [layer, values] of reference) {
-    const expected = PositionPrecision.split(values, 12, 4),
+    const expected = splitPositions(values, 12, 4),
       actual = batches.filter((b) => b.layer === layer);
     expect(new Float32Array(actual.flatMap((b) => [...b.data]))).toStrictEqual(
       expected.data,
@@ -129,7 +129,7 @@ test("text preparation yields, filters hidden layers and can stop before buildin
       boardText: true,
       hidden: new Set([1024]),
     },
-    steps = BoardTextBatchBuilder.buildSteps(scene, display, 13);
+    steps = buildBoardTextBatches(scene, display, 13);
   let checkpoints = 0,
     batches = 0;
   for (const batch of steps) {
@@ -147,13 +147,13 @@ test("text preparation yields, filters hidden layers and can stop before buildin
   expect(steps.next().done).toBe(true);
   expect(
     [
-      ...BoardTextBatchBuilder.buildSteps(scene, {
+      ...buildBoardTextBatches(scene, {
         ...display,
         boardText: false,
       }),
     ].every((b) => !b),
   ).toBeTruthy();
-  expect(() => [
-    ...BoardTextBatchBuilder.buildSteps(scene, undefined, 0),
-  ]).toThrow(/batch size/);
+  expect(() => [...buildBoardTextBatches(scene, undefined, 0)]).toThrow(
+    /batch size/,
+  );
 });

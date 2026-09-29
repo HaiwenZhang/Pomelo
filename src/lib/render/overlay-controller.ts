@@ -1,4 +1,4 @@
-import { LatestTask, type TaskTicket } from "./latest-task";
+import { LatestTask, type TaskTicket } from "../latest-task";
 import { BoardDisplay, type DisplayOptions } from "../board/display";
 import type { BoardScene, Bounds } from "../board/model";
 import { cooperative } from "../cooperative";

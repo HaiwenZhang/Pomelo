@@ -7,7 +7,7 @@ import { PathShape } from "../../src/lib/board/shapes/path";
 import { PolygonShape } from "../../src/lib/board/shapes/polygon";
 import { ZoneShape } from "../../src/lib/board/shapes/zone";
 
-import { CurveTessellator } from "../../src/lib/render/curve-tessellator";
+import { tessellateCurveRing } from "../../src/lib/render/curve-tessellator";
 
 function circle(center: Point, radius: number, clockwise = false): Segment[] {
   const arc = {
@@ -69,7 +69,7 @@ test("local tessellation bounds screen error without subdividing the whole large
         minY: focus[1] - 600 / scale,
         maxY: focus[1] + 600 / scale,
       };
-      const ring = CurveTessellator.ring(path, view, 0.2 / scale);
+      const ring = tessellateCurveRing(path, view, 0.2 / scale);
       expect(
         ring.length < 150,
         `unexpected whole-circle tessellation: ${ring.length}`,
@@ -118,7 +118,7 @@ test("viewport clipping retains disconnected parts of a concave contour", () => 
     a,
     b: points[(i + 1) % points.length],
   }));
-  const clipped = CurveTessellator.ring(
+  const clipped = tessellateCurveRing(
     path,
     { minX: -2, maxX: 2, minY: 0, maxY: 2 },
     0.01,

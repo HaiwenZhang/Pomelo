@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { BatchRangeIndex } from "../../src/lib/render/batch-range-index";
-import { PositionPrecision } from "../../src/lib/render/position-precision";
+import { splitPositions } from "../../src/lib/render/position-precision";
 import type { PrimitiveBatch } from "../../src/lib/render/primitive-batch";
 
 function index(batch: PrimitiveBatch) {
@@ -32,7 +32,7 @@ test("range culling preserves translucent submission order, merges fit ranges an
   const tree = index({
     layer: 0,
     category: "pin",
-    ...PositionPrecision.split(values, 12, 4),
+    ...splitPositions(values, 12, 4),
   });
   expect(ranges(tree, view)).toEqual([
     [0, 32],
@@ -58,7 +58,7 @@ test("rotated pads and thick lines intersecting the view survive even with cente
   const tree = index({
     layer: 0,
     category: "etch",
-    ...PositionPrecision.split(values, 12, 4),
+    ...splitPositions(values, 12, 4),
   });
   expect(ranges(tree, view)).toEqual([[0, 64]]);
 });
@@ -69,7 +69,7 @@ test("range bounds retain float residuals at microscope scale", () => {
   const tree = index({
     layer: 0,
     category: "via",
-    ...PositionPrecision.split(values, 12, 4),
+    ...splitPositions(values, 12, 4),
   });
   expect(
     ranges(tree, {
@@ -101,21 +101,20 @@ test("polygon ranges stay on triangle boundaries and include intersecting triang
     layer: 0,
     category: "pin",
     triangles: true,
-    ...PositionPrecision.split(values, 6, 2),
+    ...splitPositions(values, 6, 2),
   });
   expect(ranges(tree, view)).toEqual([[0, 96]]);
 });
 
 test("arc bounds keep an intersecting sweep even when its center is outside the viewport", async () => {
-  const { ArcBatchBuilder } =
+  const { buildArcBatches } =
     await import("../../src/lib/render/arc-batch-builder");
   const values = [];
   for (let i = 0; i < 64; i++)
     values.push(i < 32 ? 0 : 100, 0, 10, 0, 1, Math.PI / 2, 1, 0, 1, 0, 0, 1);
-  const batch = ArcBatchBuilder.build(
-    { layer: 0, category: "etch" },
-    values,
-  ).find((b) => b.arcs)!;
+  const batch = buildArcBatches({ layer: 0, category: "etch" }, values).find(
+    (b) => b.arcs,
+  )!;
   expect(ranges(index(batch), { minX: 6, minY: 6, maxX: 8, maxY: 8 })).toEqual([
     [0, 32],
   ]);

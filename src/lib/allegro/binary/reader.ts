@@ -1,6 +1,5 @@
 import { BrdTextDecoder } from "./text-decoder";
 import { parserError } from "../../parser-error";
-export type Raw = Record<string, any>;
 export class Reader {
   offset = 0;
   readonly view: DataView;

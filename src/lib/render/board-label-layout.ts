@@ -1,6 +1,6 @@
 import { BoardDisplay } from "../board/display";
 import type { BoardScene, Bounds, Point, Via } from "../board/model";
-import { PinShape } from "../board/shapes/pin";
+import { pinDisplayCategory } from "../board/shapes/pin";
 import { SegmentShape } from "../board/shapes/segment";
 import { ViaShape } from "../board/shapes/via";
 import { ZoneShape } from "../board/shapes/zone";
@@ -316,7 +316,7 @@ export class BoardLabelLayout {
         if (!visible(...pin.at, 1)) continue;
         const name = scene.nets.get(pin.net);
         if (!name) continue;
-        const category = new PinShape(pin).displayCategory();
+        const category = pinDisplayCategory(pin);
         for (const p of pin.shapes) {
           if (!BoardDisplay.isVisible(options, p.layer, category)) continue;
           const size = Math.min(

@@ -1,7 +1,7 @@
 import type { IDisposable } from "../disposable";
 import type { FontAtlas } from "./font-metrics";
 import { FontMetrics } from "./font-metrics";
-import { PositionPrecision } from "./position-precision";
+import { splitPositions } from "./position-precision";
 
 type LabelBuffer = {
   buffer: GPUBuffer;
@@ -46,7 +46,7 @@ export class LabelLayer implements IDisposable {
         this.buffers.set(key, old);
       }
       old.count = data.length / 16;
-      const split = PositionPrecision.split(data, 16, 2);
+      const split = splitPositions(data, 16, 2);
       this.device.queue.writeBuffer(old.buffer, 0, split.data);
       this.device.queue.writeBuffer(old.residualBuffer, 0, split.residual);
     }

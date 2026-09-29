@@ -45,6 +45,8 @@ test("embedded model bytes retain NULs, invalid UTF-8 and alignment across layou
         r = property(version, raw, name);
       expect(r.record.PayloadKind).toBe("embedded-model");
       expect(r.record.Value).toBe(undefined);
+      if (r.record.PayloadKind !== "embedded-model")
+        throw new Error("Expected binary model payload");
       expect([...r.record.ValueBytes]).toStrictEqual(raw);
       expect(r.record.ValueBytes.buffer).toBe(r.buffer);
       expect(r.decoder.issues.size).toBe(0);

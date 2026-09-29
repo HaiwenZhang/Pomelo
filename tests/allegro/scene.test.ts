@@ -1,14 +1,12 @@
 import { test, expect } from "vitest";
 
-import { AllegroUnits } from "../../src/lib/allegro/units";
+import { allegroUnitScale } from "../../src/lib/allegro/units";
 
 import { ArcShape } from "../../src/lib/board/shapes/arc";
 import { Camera } from "../../src/lib/interaction/camera";
 test("mils and metric board coordinates resolve to the same physical distance", () => {
-  expect(100000 * AllegroUnits.toMillimeters(1, 100)).toBe(25.4);
-  expect(254000 * AllegroUnits.toMillimeters(3, 10000)).toBe(
-    25.400000000000002,
-  );
+  expect(100000 * allegroUnitScale(1, 100)).toBe(25.4);
+  expect(254000 * allegroUnitScale(3, 10000)).toBe(25.400000000000002);
 });
 test("arc sweep chooses the directed crossing over the angle seam", () => {
   const d = Math.PI / 180;

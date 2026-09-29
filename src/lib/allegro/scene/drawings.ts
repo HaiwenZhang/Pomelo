@@ -5,7 +5,7 @@ import type {
   Segment,
 } from "../../board/model";
 import { ArcShape } from "../../board/shapes/arc";
-import type { Raw } from "../binary/reader";
+import { isRecordType, type AllegroRecord } from "../binary/record-types";
 import type { BrdDatabase } from "../database";
 import { cooperative } from "../../cooperative";
 import { parserError } from "../../parser-error";
@@ -18,7 +18,7 @@ export class AllegroDrawingBuilder {
   /** Only stored Dimension graphics. Never reconstruct arrows or dimension values
    * from settings, and never apply a second transform to placed-symbol geometry. */
   async build(
-    candidates: readonly Raw[],
+    candidates: readonly AllegroRecord<0x14>[],
     texts: readonly BoardText[],
     diagnostics: string[],
     signal?: AbortSignal,
@@ -27,19 +27,19 @@ export class AllegroDrawingBuilder {
     const scale = this.scale;
     const checkpoint = cooperative(signal),
       selected = new Map(candidates.map((g) => [g.Key, g]));
-    const owners = new Map<number, Raw>(),
+    const owners = new Map<number, AllegroRecord<0x2d>>(),
       accepted = new Set<number>(),
       groups = new Map<number, BoardDrawing>();
     for (const graphic of candidates) {
       const owner = db.get(graphic.Parent);
-      if (owner?.type === 0x2d) owners.set(owner.Key, owner);
+      if (isRecordType(owner, 0x2d)) owners.set(owner.Key, owner);
       const pause = checkpoint();
       if (pause) await pause;
     }
     for (const text of texts)
       if (text.layer === DIMENSION_LAYER && text.ownerId !== undefined) {
         const owner = db.get(text.ownerId);
-        if (owner?.type === 0x2d) owners.set(owner.Key, owner);
+        if (isRecordType(owner, 0x2d)) owners.set(owner.Key, owner);
       }
     function group(id: number, ownerId?: number) {
       let result = groups.get(id);
@@ -57,7 +57,7 @@ export class AllegroDrawingBuilder {
       }
       return result;
     }
-    async function append(graphic: Raw, ownerId?: number) {
+    async function append(graphic: AllegroRecord<0x14>, ownerId?: number) {
       if (accepted.has(graphic.Key)) return;
       accepted.add(graphic.Key);
       const drawing = group(ownerId ?? graphic.Key, ownerId),
@@ -74,7 +74,7 @@ export class AllegroDrawingBuilder {
         }
         seen.add(key);
         const record = db.get(key);
-        if (!record || ![1, 21, 22, 23].includes(record.type)) {
+        if (!record || !isRecordType(record, [1, 21, 22, 23] as const)) {
           diagnostics.push(`尺寸图形 ${graphic.Key} 缺失或无效路径引用 ${key}`);
           break;
         }
@@ -138,7 +138,7 @@ export class AllegroDrawingBuilder {
           throw parserError("brdDrawingOwnerChainLoop", { detail: key });
         seen.add(key);
         const graphic = db.get(key);
-        if (graphic?.type !== 0x14) {
+        if (!isRecordType(graphic, 0x14)) {
           diagnostics.push(`尺寸图形所属链缺失或无效引用 ${key}`);
           break;
         }

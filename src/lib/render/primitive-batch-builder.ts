@@ -8,17 +8,17 @@ import { ViaShape } from "../board/shapes/via";
 import { ZoneShape } from "../board/shapes/zone";
 
 import { type DisplayOptions } from "../board/display";
-import { BoardTextBatchBuilder } from "./board-text-batch-builder";
-import { DrawingBatchBuilder } from "./drawing-batch-builder";
-import { PositionPrecision } from "./position-precision";
+import { buildBoardTextBatches } from "./board-text-batch-builder";
+import { buildDrawingBatches } from "./drawing-batch-builder";
+import { splitPositionSteps } from "./position-precision";
 import type { PrimitiveBatch } from "./primitive-batch";
 
-import { ArcBatchBuilder } from "./arc-batch-builder";
+import { buildArcBatchSteps } from "./arc-batch-builder";
 import { copperMaterial, type ColorMode } from "./color-mode";
-import { CopperBatchPacker } from "./copper-batch-packer";
-import { SelectionPacketBuilder } from "./selection-packet-builder";
+import { packCopperBatches } from "./copper-batch-packer";
+import { buildSelectionPackets } from "./selection-packet-builder";
 
-import { SelectionLayerCollector } from "./selection-layer-collector";
+import { collectLayerMembers } from "./selection-layer-collector";
 
 export type PrimitiveBuildOptions =
   | { kind: "scene" }
@@ -190,7 +190,7 @@ export class PrimitiveBatchBuilder {
     options: PrimitiveBuildOptions = { kind: "scene" },
   ): Generator<PrimitiveBatch | undefined> {
     if (options.kind === "scene")
-      yield* CopperBatchPacker.packSteps(this.layerSteps(true));
+      yield* packCopperBatches(this.layerSteps(true));
     // A transient hover is rebuilt on display changes. Persistent board/selection
     // geometry must retain hidden layers so toggling them needs no re-upload.
     else {
@@ -214,9 +214,7 @@ export class PrimitiveBatchBuilder {
     let work = 0;
     const layers = new BoardLayers(scene).all();
     const members =
-      layers.length > 1
-        ? yield* SelectionLayerCollector.collectSteps(scene)
-        : undefined;
+      layers.length > 1 ? yield* collectLayerMembers(scene) : undefined;
     const originX = this.originX,
       originY = this.originY;
     // Group source references only; expand bounded stroke batches at the layer's
@@ -412,7 +410,7 @@ export class PrimitiveBatchBuilder {
         }
       if (backdrillBasePads.length) {
         if (!zoneFills)
-          yield* SelectionPacketBuilder.buildSteps(
+          yield* buildSelectionPackets(
             { layer: layer.id, category: "via", backdrillBase: true },
             backdrillBasePads,
           );
@@ -421,7 +419,7 @@ export class PrimitiveBatchBuilder {
             layer: layer.id,
             category: "via" as const,
             backdrillBase: true,
-            ...(yield* PositionPrecision.splitSteps(backdrillBasePads, 12, 4)),
+            ...(yield* splitPositionSteps(backdrillBasePads, 12, 4)),
           };
           backdrillBasePads.length = 0;
           yield batch;
@@ -484,16 +482,10 @@ export class PrimitiveBatchBuilder {
               data: new Float32Array(0),
               residual: new Float32Array(0),
             };
-          else
-            yield* SelectionPacketBuilder.buildSteps(
-              meta,
-              values,
-              stride,
-              curves,
-            );
+          else yield* buildSelectionPackets(meta, values, stride, curves);
           values.length = 0;
         } else if (curves) {
-          const ready = yield* ArcBatchBuilder.buildSteps(meta, values);
+          const ready = yield* buildArcBatchSteps(meta, values);
           values.length = 0;
           while (ready.length) {
             const batch = ready.shift()!;
@@ -510,7 +502,7 @@ export class PrimitiveBatchBuilder {
         } else {
           const batch = {
             ...meta,
-            ...(yield* PositionPrecision.splitSteps(
+            ...(yield* splitPositionSteps(
               values,
               stride,
               stride === 6 ? 2 : 4,
@@ -522,7 +514,7 @@ export class PrimitiveBatchBuilder {
       }
       const layerTexts = textByLayer.get(layer.id);
       if (layerTexts) {
-        yield* BoardTextBatchBuilder.buildSteps(
+        yield* buildBoardTextBatches(
           { ...scene, texts: layerTexts },
           visibility,
         );
@@ -592,7 +584,7 @@ export class PrimitiveBatchBuilder {
       }
     for (const { data, viaLayers } of holeGroups.values()) {
       if (!zoneFills)
-        yield* SelectionPacketBuilder.buildSteps(
+        yield* buildSelectionPackets(
           { layer: -1, category: "drill", viaLayers },
           data,
         );
@@ -601,7 +593,7 @@ export class PrimitiveBatchBuilder {
           layer: -1,
           category: "drill" as const,
           viaLayers,
-          ...(yield* PositionPrecision.splitSteps(data, 12, 4)),
+          ...(yield* splitPositionSteps(data, 12, 4)),
         };
         data.length = 0;
         yield batch;
@@ -612,7 +604,7 @@ export class PrimitiveBatchBuilder {
     // Submit once per cut-layer scope, after ordinary centers, not once per layer.
     for (const { data, viaLayers } of backdrills.values()) {
       if (!zoneFills)
-        yield* SelectionPacketBuilder.buildSteps(
+        yield* buildSelectionPackets(
           { layer: -1, category: "drill", viaLayers, backdrill: true },
           data,
         );
@@ -622,7 +614,7 @@ export class PrimitiveBatchBuilder {
           category: "drill" as const,
           viaLayers,
           backdrill: true,
-          ...(yield* PositionPrecision.splitSteps(data, 12, 4)),
+          ...(yield* splitPositionSteps(data, 12, 4)),
         };
         data.length = 0;
         yield batch;
@@ -631,13 +623,13 @@ export class PrimitiveBatchBuilder {
     }
     // Copper text participates in its copper layer; fabrication/silk text gets
     // separately controllable drawing layers rather than a DOM overlay.
-    yield* DrawingBatchBuilder.buildSteps(scene, visibility);
+    yield* buildDrawingBatches(scene, visibility);
     for (const texts of textByLayer.values())
-      yield* BoardTextBatchBuilder.buildSteps({ ...scene, texts }, visibility);
+      yield* buildBoardTextBatches({ ...scene, texts }, visibility);
     const outline: number[] = [];
     for (const segment of scene.outline)
       this.appendSegment(outline, segment, [0.6, 0.68, 0.73], true);
-    const boundary = yield* ArcBatchBuilder.buildSteps(
+    const boundary = yield* buildArcBatchSteps(
       { layer: -1, category: "outline" },
       outline,
     );

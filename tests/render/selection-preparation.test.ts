@@ -7,9 +7,9 @@ import {
   selectionSceneSteps,
 } from "../../src/lib/interaction/picking";
 
-import { ArcBatchBuilder } from "../../src/lib/render/arc-batch-builder";
-import { SelectionLayerCollector } from "../../src/lib/render/selection-layer-collector";
-import { SelectionPacketBuilder } from "../../src/lib/render/selection-packet-builder";
+import { buildArcBatches } from "../../src/lib/render/arc-batch-builder";
+import { collectLayerMembers } from "../../src/lib/render/selection-layer-collector";
+import { buildSelectionPackets } from "../../src/lib/render/selection-packet-builder";
 
 test("large network lookup yields, retains hidden members and honors draw priority without sorting entries", () => {
   const scene: BoardScene = {
@@ -91,8 +91,8 @@ test("bounded selection packets preserve exact line/arc data, residuals and subm
       1,
     );
   const meta = { layer: 2, category: "etch" as const },
-    expected = ArcBatchBuilder.build(meta, values);
-  const steps = [...SelectionPacketBuilder.buildSteps(meta, values, 12, true)],
+    expected = buildArcBatches(meta, values);
+  const steps = [...buildSelectionPackets(meta, values, 12, true)],
     actual = steps.filter((s) => !!s);
   expect(steps.filter((s) => !s).length >= 3).toBeTruthy();
   let seenArc = false;
@@ -141,7 +141,7 @@ test("selection layer lists preserve repeated owners and multiple pads on the sa
     diagnostics: [],
     bounds: { minX: 0, minY: 0, maxX: 1, maxY: 1 },
   };
-  const steps = SelectionLayerCollector.collectSteps(scene);
+  const steps = collectLayerMembers(scene);
   let result = steps.next();
   while (!result.done) result = steps.next();
   expect(result.value.vias.get(0)).toStrictEqual([a, a]);
@@ -179,7 +179,7 @@ test("selection layer preparation yields inside large owner and pad collections"
     diagnostics: [],
     bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
   };
-  const steps = SelectionLayerCollector.collectSteps(scene);
+  const steps = collectLayerMembers(scene);
   expect(steps.next().done).toBe(false);
   expect(reads > 0 && reads < 100000).toBeTruthy();
   steps.return({

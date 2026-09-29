@@ -11,7 +11,7 @@ import {
   type PrimitiveBuildOptions,
 } from "./primitive-batch-builder";
 import type { ColorMode } from "./color-mode";
-import { BorrowedOutlineCollector } from "./borrowed-outline-collector";
+import { collectBorrowedOutlines } from "./borrowed-outline-collector";
 import { cooperative } from "../cooperative";
 import type { IDisposable } from "../disposable";
 
@@ -135,7 +135,7 @@ export class WebGPUBatchUploader implements IDisposable {
           continue;
         }
         if (batch.outlineRefs) {
-          for (const entry of BorrowedOutlineCollector.collectSteps(
+          for (const entry of collectBorrowedOutlines(
             batch.outlineRefs,
             uploader.zoneOutlines,
           )) {
