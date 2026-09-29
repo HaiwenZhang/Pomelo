@@ -1,11 +1,9 @@
+import { AltiumLayerResolver } from "./layer-resolver";
 import type { BoardText } from "../../board/model";
 import type { DrawingLayer } from "../../board/model";
 import { cooperative } from "../../cooperative";
 import type { AltiumLayers } from "../layers";
-import {
-  altiumProperty,
-  type AltiumPropertiesRecord,
-} from "../binary/properties";
+import { type AltiumPropertiesRecord } from "../binary/properties";
 import { AltiumTextReader, AltiumWideStringReader } from "../records/texts";
 export interface AltiumTextModel {
   texts: BoardText[];
@@ -20,15 +18,16 @@ type AltiumTextInput = {
   wideData: Uint8Array;
   stack: AltiumLayers;
   board: AltiumPropertiesRecord;
+  layerResolver?: AltiumLayerResolver;
 };
 export class AltiumTextBuilder {
   constructor(private readonly input: AltiumTextInput) {}
   async build(signal?: AbortSignal): Promise<AltiumTextModel> {
     const { data, count, wideData, stack, board } = this.input;
+    const resolver =
+      this.input.layerResolver ?? new AltiumLayerResolver(stack, board);
     const wide = new AltiumWideStringReader(wideData).read(),
-      texts: BoardText[] = [],
-      drawingLayers: DrawingLayer[] = [];
-    const drawingLayerIds = new Set<number>();
+      texts: BoardText[] = [];
     let emptyTexts = 0,
       nonStrokeFonts = 0;
     const pause = cooperative(signal);
@@ -41,25 +40,9 @@ export class AltiumTextBuilder {
         emptyTexts++;
         continue;
       }
-      const copper = stack.v6.get(source.layer),
-        layer = copper ?? 0x20000 + source.layer;
-      if (copper === undefined && !drawingLayerIds.has(layer)) {
-        drawingLayerIds.add(layer);
-        drawingLayers.push({
-          id: layer,
-          name:
-            altiumProperty(board, `LAYER${source.layer}NAME`) ??
-            `Altium Layer ${source.layer}`,
-          color:
-            source.layer === 33
-              ? "#e3e7d3"
-              : source.layer === 34
-                ? "#d8c5d4"
-                : "#a7a9bd",
-          layerFunction: "unknown",
-          defaultVisible: source.layer === 33,
-        });
-      }
+      const copper = resolver.copper(source.layer),
+        layer = copper ?? resolver.drawing(source.layer);
+
       // BoardScene uses one built-in stroke alphabet. Preserve source placement
       // and Unicode content; non-stroke font faces are intentionally approximate.
       if (source.fontType !== 0) nonStrokeFonts++;
@@ -83,7 +66,7 @@ export class AltiumTextBuilder {
     }
     return {
       texts,
-      drawingLayers,
+      drawingLayers: resolver.drawings,
       sourceTexts: count,
       emptyTexts,
       nonStrokeFonts,

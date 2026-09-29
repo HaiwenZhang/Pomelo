@@ -1,6 +1,9 @@
-import { CopperMesh } from "../../board/copper-mesh";
-import type { Bounds, Layer, Point, Zone } from "../../board/model";
-import { ZoneShape } from "../../board/shapes/zone";
+import { KiCadSceneContext } from "./context";
+import { kiCadRequired as required, kiCadPosition as point } from "./fields";
+import { BoundsAccumulator } from "../../board/bounds";
+import { createCopperZone } from "../../board/copper-zone";
+import type { Bounds, Layer, Zone } from "../../board/model";
+
 import { PolygonShape } from "../../board/shapes/polygon";
 import { cooperative } from "../../cooperative";
 import { splitKiCadFillRing } from "./fill-rings";
@@ -9,19 +12,8 @@ import {
   kiCadAtom,
   kiCadChild,
   kiCadChildren,
-  kiCadNumber,
   KiCadExpressionReader,
-  type KiCadExpression,
 } from "../syntax/sexpr";
-const required = (node: KiCadExpression, name: string) => {
-  const child = kiCadChild(node, name);
-  if (!child) throw new Error(`KiCad ${node.head} 缺少 ${name}`);
-  return child;
-};
-const point = (node: KiCadExpression): Point => [
-  kiCadNumber(node, 0),
-  -kiCadNumber(node, 1),
-];
 export interface KiCadZoneModel {
   zones: Zone[];
   bounds: Bounds;
@@ -36,45 +28,21 @@ export interface KiCadZoneModel {
 export class KiCadZoneBuilder {
   constructor(
     private readonly index: KiCadBoardIndex,
-    private readonly layers: Layer[],
-    private readonly nets: Map<number, string>,
+    layers: Layer[],
+    nets: Map<number, string>,
+    private readonly context = new KiCadSceneContext(layers, nets),
   ) {}
   async build(signal?: AbortSignal): Promise<KiCadZoneModel> {
-    const { index, layers, nets } = this;
+    const { index } = this;
     const expressions = new KiCadExpressionReader(index.bytes);
     const zones: Zone[] = [],
-      bounds: Bounds = {
-        minX: Infinity,
-        minY: Infinity,
-        maxX: -Infinity,
-        maxY: -Infinity,
-      };
-    const layerIds = new Map(layers.map((layer) => [layer.name, layer.id])),
-      netNames = new Map([...nets].map(([id, name]) => [name, id]));
-    let nextNet = Math.max(0, ...nets.keys()) + 1,
-      sourceFillPolygons = 0,
+      extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
+    const { layerIds } = this.context;
+    let sourceFillPolygons = 0,
       sourcePoints = 0,
       unfilledZones = 0,
       keepouts = 0;
-    const resolveNet = (node: KiCadExpression) => {
-      const field = kiCadChild(node, "net");
-      if (!field) return 0;
-      const value = kiCadAtom(field);
-      if (/^\d+$/.test(value)) {
-        const id = Number(value);
-        if (id !== 0 && !nets.has(id))
-          throw new Error(`KiCad 铜区引用未知网络 ${id}`);
-        return id;
-      }
-      if (!value) return 0;
-      let id = netNames.get(value);
-      if (id === undefined) {
-        id = nextNet++;
-        nets.set(id, value);
-        netNames.set(value, id);
-      }
-      return id;
-    };
     const spans = index.items.get("zone") ?? [],
       pause = cooperative(signal);
     for (let i = 0; i < spans.length; i++) {
@@ -90,7 +58,7 @@ export class KiCadZoneBuilder {
         unfilledZones++;
         continue;
       }
-      const net = resolveNet(node);
+      const net = this.context.net(node);
       for (const fill of fills) {
         sourceFillPolygons++;
         const layerName = kiCadAtom(required(fill, "layer")),
@@ -104,26 +72,22 @@ export class KiCadZoneBuilder {
         if (ring.length < 3)
           throw new Error(`KiCad 铜区填充点数不足 @${span.start}`);
         const rings = splitKiCadFillRing(ring);
-        const mesh = await new CopperMesh(rings).build(signal);
         const boundaryBreaks =
           rings.length === 1
             ? new PolygonShape(rings).bridgeEdges()
             : new Uint32Array(0);
-        const zone: Zone = {
-          id: 0x78000000 + zones.length,
-          layer,
-          net,
-          paths: [],
-          rings: [],
-          ...mesh,
-          ...(boundaryBreaks.length ? { boundaryBreaks } : {}),
-        };
+        const zone = await createCopperZone(
+          {
+            id: 0x78000000 + zones.length,
+            layer,
+            net,
+            rings,
+            boundaryBreaks,
+          },
+          signal,
+        );
         zones.push(zone);
-        const box = new ZoneShape(zone).bounds();
-        bounds.minX = Math.min(bounds.minX, box.minX);
-        bounds.minY = Math.min(bounds.minY, box.minY);
-        bounds.maxX = Math.max(bounds.maxX, box.maxX);
-        bounds.maxY = Math.max(bounds.maxY, box.maxY);
+        extent.includeZone(zone);
       }
     }
     return {

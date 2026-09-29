@@ -1,5 +1,7 @@
+import { AltiumLayerResolver } from "./scene/layer-resolver";
+import { BoundsAccumulator } from "../board/bounds";
 import type { BoardScene } from "../board/model";
-import type { Bounds } from "../board/model";
+
 import { AltiumCompoundFile } from "./binary/compound";
 import { AltiumPropertyReader } from "./binary/properties";
 import { AltiumLayerReader } from "./layers";
@@ -54,6 +56,7 @@ export async function importAltium(
   )[0];
   const stack = new AltiumLayerReader(board).read(),
     outline = new AltiumOutlineReader(board).read();
+  const layerResolver = new AltiumLayerResolver(stack, board);
   progress?.("读取 Altium 网络与器件");
   const nets = await new AltiumNetReader(
     requireData("Nets6"),
@@ -75,6 +78,7 @@ export async function importAltium(
     data: requireData("Regions6"),
     count: sourceRegions,
     stack,
+    layerResolver,
     nets,
     polygons,
     board,
@@ -92,6 +96,7 @@ export async function importAltium(
     },
     counts: { tracks: trackCount, arcs: arcCount, vias: viaCount },
     stack,
+    layerResolver,
     board,
     nets,
     filledPolygonIds: regions.filledPolygonIds,
@@ -102,6 +107,7 @@ export async function importAltium(
     data: requireData("Pads6"),
     count: padCount,
     stack,
+    layerResolver,
     nets,
     components,
     board,
@@ -111,6 +117,7 @@ export async function importAltium(
     data: requireData("Fills6"),
     count: sourceFills,
     stack,
+    layerResolver,
     nets,
     board,
   }).build(signal);
@@ -120,15 +127,12 @@ export async function importAltium(
     count: sourceTexts,
     wideData: requireData("WideStrings6"),
     stack,
+    layerResolver,
     board,
   }).build(signal);
   signal?.throwIfAborted();
-  const bounds: Bounds = {
-    minX: Infinity,
-    minY: Infinity,
-    maxX: -Infinity,
-    maxY: -Infinity,
-  };
+  const extent = new BoundsAccumulator(),
+    bounds = extent.bounds;
   for (const box of [
     outline.bounds,
     routes.bounds,
@@ -137,10 +141,7 @@ export async function importAltium(
     fills.bounds,
   ]) {
     if (!Object.values(box).every(Number.isFinite)) continue;
-    bounds.minX = Math.min(bounds.minX, box.minX);
-    bounds.minY = Math.min(bounds.minY, box.minY);
-    bounds.maxX = Math.max(bounds.maxX, box.maxX);
-    bounds.maxY = Math.max(bounds.maxY, box.maxY);
+    extent.include(box);
   }
   if (!Object.values(bounds).every(Number.isFinite))
     throw new Error("Altium 文件没有可绘制几何");
@@ -191,15 +192,6 @@ export async function importAltium(
     diagnostics.push(`${fills.keepouts} 个 Fill6 禁布图元尚未显示`);
   if (fills.degenerate)
     diagnostics.push(`${fills.degenerate} 个 Fill6 矩形尺寸退化`);
-  const drawingLayers = new Map(
-    [
-      ...routes.drawingLayers,
-      ...fills.drawingLayers,
-      ...regions.drawingLayers,
-      ...textModel.drawingLayers,
-      ...pads.drawingLayers,
-    ].map((layer) => [layer.id, layer]),
-  );
   const scene: BoardScene = {
     layers: stack.layers,
     nets,
@@ -215,7 +207,7 @@ export async function importAltium(
       ...pads.drawings,
       ...fills.drawings,
     ],
-    drawingLayers: [...drawingLayers.values()],
+    drawingLayers: layerResolver.drawings,
     bounds,
     diagnostics,
   };

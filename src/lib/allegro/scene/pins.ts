@@ -125,7 +125,7 @@ export async function buildPins(
           });
       }
       pins.push(pin);
-      includePads(pin, shapes);
+      includePads(pin);
       const pause = buildProgress.checkpoint();
       if (pause) await pause;
     }

@@ -1,3 +1,5 @@
+import { AltiumLayerResolver } from "./layer-resolver";
+import { BoundsAccumulator } from "../../board/bounds";
 import type {
   BoardDrawing,
   Bounds,
@@ -6,7 +8,7 @@ import type {
   Segment,
   Via,
 } from "../../board/model";
-import { SegmentShape } from "../../board/shapes/segment";
+
 import { cooperative } from "../../cooperative";
 import type { AltiumLayers } from "../layers";
 import { altiumNetId } from "../nets";
@@ -34,7 +36,6 @@ export interface AltiumRouteModel {
   keepoutPrimitives: number;
   zeroWidthPrimitives: number;
 }
-const colors = ["#93aabd", "#b3a591", "#8aa99e", "#a396b6"];
 type AltiumRouteInput = {
   streams: {
     tracks: Uint8Array;
@@ -48,6 +49,7 @@ type AltiumRouteInput = {
   };
   stack: AltiumLayers;
   board: AltiumPropertiesRecord;
+  layerResolver?: AltiumLayerResolver;
   nets: Map<number, string>;
   filledPolygonIds?: Set<number>;
   polygons?: AltiumPropertiesRecord[];
@@ -77,48 +79,20 @@ export class AltiumRouteBuilder {
       filledPolygonIds = new Set<number>(),
       polygons = [],
     } = this.input;
+    const resolver =
+      this.input.layerResolver ?? new AltiumLayerResolver(stack, board);
     const segments: Segment[] = [],
       vias: Via[] = [],
       singleLayerPads: Pin[] = [],
-      drawings: BoardDrawing[] = [],
-      drawingLayers: DrawingLayer[] = [],
-      drawingIds = new Map<number, number>();
-    const bounds: Bounds = {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-    };
+      drawings: BoardDrawing[] = [];
+    const extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
     let polygonPrimitives = 0,
       unfilledPolygonPrimitives = 0,
       keepoutPrimitives = 0,
       zeroWidthPrimitives = 0;
     const pause = cooperative(signal);
-    const copperLayer = (v6: number, v7: number) =>
-      stack.v7.get(v7) ?? stack.v6.get(v6);
-    const rawByLayer = new Map([...stack.v6].map(([raw, id]) => [id, raw]));
-    const drawingLayer = (v6: number) => {
-      let id = drawingIds.get(v6);
-      if (id !== undefined) return id;
-      id = 0x20000 + v6;
-      drawingIds.set(v6, id);
-      const name =
-        altiumProperty(board, `LAYER${v6}NAME`) ?? `Altium Layer ${v6}`;
-      drawingLayers.push({
-        id,
-        name,
-        color: colors[drawingLayers.length % colors.length],
-        layerFunction: "unknown",
-        defaultVisible: true,
-      });
-      return id;
-    };
-    const include = (box: Bounds) => {
-      bounds.minX = Math.min(bounds.minX, box.minX);
-      bounds.minY = Math.min(bounds.minY, box.minY);
-      bounds.maxX = Math.max(bounds.maxX, box.maxX);
-      bounds.maxY = Math.max(bounds.maxY, box.maxY);
-    };
+    const rawByLayer = resolver.rawByLayer;
     const appendSegment = ({
       source,
       start,
@@ -153,12 +127,12 @@ export class AltiumRouteBuilder {
         zeroWidthPrimitives++;
         return;
       }
-      const copper = copperLayer(source.layerV6, source.layerV7),
+      const copper = resolver.copper(source.layerV6, source.layerV7),
         id = 0x40000000 + segments.length + drawings.length;
       const segment: Segment = {
         id,
         trackId: id,
-        layer: copper ?? drawingLayer(source.layerV6),
+        layer: copper ?? resolver.drawing(source.layerV6),
         net: altiumNetId(net, nets),
         a: start,
         b: end,
@@ -167,7 +141,7 @@ export class AltiumRouteBuilder {
       if (arc) segment.arc = arc;
       if (copper !== undefined) {
         segments.push(segment);
-        include(new SegmentShape(segment).bounds());
+        extent.includeSegment(segment);
       } else {
         const drawingId = 0x68000000 + drawings.length;
         drawings.push({
@@ -294,13 +268,7 @@ export class AltiumRouteBuilder {
           drill: 0,
           shapes: pads,
         });
-        const radius = pads[0].width / 2;
-        include({
-          minX: source.at[0] - radius,
-          minY: source.at[1] - radius,
-          maxX: source.at[0] + radius,
-          maxY: source.at[1] + radius,
-        });
+        extent.includePadOwner(singleLayerPads[singleLayerPads.length - 1]);
         continue;
       }
       const via: Via = {
@@ -314,20 +282,14 @@ export class AltiumRouteBuilder {
         pads,
       };
       vias.push(via);
-      const radius = Math.max(source.diameter, source.drill) / 2;
-      include({
-        minX: source.at[0] - radius,
-        minY: source.at[1] - radius,
-        maxX: source.at[0] + radius,
-        maxY: source.at[1] + radius,
-      });
+      extent.includePadOwner(via);
     }
     return {
       segments,
       vias,
       singleLayerPads,
       drawings,
-      drawingLayers,
+      drawingLayers: resolver.drawings,
       bounds,
       sourceTracks: counts.tracks,
       sourceArcs: counts.arcs,

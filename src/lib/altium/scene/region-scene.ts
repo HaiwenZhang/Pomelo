@@ -1,3 +1,5 @@
+import { AltiumLayerResolver } from "./layer-resolver";
+import { BoundsAccumulator } from "../../board/bounds";
 import type {
   BoardDrawing,
   Bounds,
@@ -5,8 +7,8 @@ import type {
   Segment,
   Zone,
 } from "../../board/model";
-import { CopperMesh } from "../../board/copper-mesh";
-import { ZoneShape } from "../../board/shapes/zone";
+import { createCopperZone } from "../../board/copper-zone";
+
 import { cooperative } from "../../cooperative";
 import type { AltiumLayers } from "../layers";
 import { altiumNetId } from "../nets";
@@ -37,21 +39,18 @@ type AltiumRegionInput = {
   nets: Map<number, string>;
   polygons: AltiumPropertiesRecord[];
   board: AltiumPropertiesRecord;
+  layerResolver?: AltiumLayerResolver;
 };
 export class AltiumRegionBuilder {
   constructor(private readonly input: AltiumRegionInput) {}
   async build(signal?: AbortSignal): Promise<AltiumRegionModel> {
     const { data, count, stack, nets, polygons, board } = this.input;
+    const resolver =
+      this.input.layerResolver ?? new AltiumLayerResolver(stack, board);
     const zones: Zone[] = [],
-      drawings: BoardDrawing[] = [],
-      drawingLayers: DrawingLayer[] = [];
-    const drawingLayerIds = new Set<number>();
-    const bounds: Bounds = {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-    };
+      drawings: BoardDrawing[] = [];
+    const extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
     let nonCopperRegions = 0,
       otherRegions = 0,
       sourceVertices = 0;
@@ -70,23 +69,11 @@ export class AltiumRegionBuilder {
         otherRegions++;
         continue;
       }
-      const layer = stack.v6.get(region.layer);
+      const layer = resolver.copper(region.layer);
       if (layer === undefined) {
         nonCopperRegions++;
-        const drawLayer = 0x20000 + region.layer,
+        const drawLayer = resolver.drawing(region.layer),
           id = 0x6d000000 + region.index;
-        if (!drawingLayerIds.has(drawLayer)) {
-          drawingLayerIds.add(drawLayer);
-          drawingLayers.push({
-            id: drawLayer,
-            name:
-              altiumProperty(board, `LAYER${region.layer}NAME`) ??
-              `Altium Layer ${region.layer}`,
-            color: "#a7a9bd",
-            layerFunction: "unknown",
-            defaultVisible: false,
-          });
-        }
         const segments: Segment[] = [];
         for (const ring of [region.outline, ...region.holes])
           for (let i = 0; i < ring.length; i++)
@@ -123,30 +110,23 @@ export class AltiumRegionBuilder {
             net = value;
         }
       }
-      const mesh = await new CopperMesh([
-        region.outline,
-        ...region.holes,
-      ]).build(signal);
-      const zone: Zone = {
-        id: 0x78000000 + region.index,
-        layer,
-        net: altiumNetId(net, nets),
-        paths: [],
-        rings: [],
-        ...mesh,
-      };
+      const zone = await createCopperZone(
+        {
+          id: 0x78000000 + region.index,
+          layer,
+          net: altiumNetId(net, nets),
+          rings: [region.outline, ...region.holes],
+        },
+        signal,
+      );
       zones.push(zone);
       if (region.polygon !== 0xffff) filledPolygonIds.add(region.polygon);
-      const box = new ZoneShape(zone).bounds();
-      bounds.minX = Math.min(bounds.minX, box.minX);
-      bounds.minY = Math.min(bounds.minY, box.minY);
-      bounds.maxX = Math.max(bounds.maxX, box.maxX);
-      bounds.maxY = Math.max(bounds.maxY, box.maxY);
+      extent.includeZone(zone);
     }
     return {
       zones,
       drawings,
-      drawingLayers,
+      drawingLayers: resolver.drawings,
       bounds,
       sourceRegions: count,
       filledRegions: zones.length,

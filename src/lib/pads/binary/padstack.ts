@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 import type { PadsContainer } from "./container";
 import { cooperative } from "../../cooperative";
 import { PADS_BASIC_TO_MM } from "./metadata";
@@ -40,27 +41,11 @@ export class PadsPadstackReader {
       layerSection = sections[5],
       pause = cooperative(signal);
     signal?.throwIfAborted();
-    const range = (at: number, n: number) => {
-      if (
-        !Number.isSafeInteger(at) ||
-        at < 0 ||
-        n < 0 ||
-        at > view.byteLength - n
-      )
-        throw new Error(`PADS 焊盘字段越界 ${at}+${n}`);
-    };
-    const u8 = (at: number) => {
-      range(at, 1);
-      return view.getUint8(at);
-    };
-    const u32 = (at: number) => {
-      range(at, 4);
-      return view.getUint32(at, true);
-    };
-    const i32 = (at: number) => {
-      range(at, 4);
-      return view.getInt32(at, true);
-    };
+    const reader = new PadsBinaryView(view, "焊盘字段"),
+      range = reader.range,
+      u8 = reader.u8,
+      u32 = reader.u32,
+      i32 = reader.i32;
     const length = (at: number) => i32(at) * PADS_BASIC_TO_MM,
       angle = (at: number) => ((i32(at) / 1800000) * Math.PI) / 180;
     const legacy2011 = version === 0x2011;

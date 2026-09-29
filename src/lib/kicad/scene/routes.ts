@@ -1,5 +1,8 @@
-import type { Bounds, Layer, Point, Segment, Via } from "../../board/model";
-import { SegmentShape } from "../../board/shapes/segment";
+import { KiCadSceneContext } from "./context";
+import { kiCadRequired as required, kiCadPosition as position } from "./fields";
+import { BoundsAccumulator } from "../../board/bounds";
+import type { Bounds, Layer, Segment, Via } from "../../board/model";
+
 import { cooperative } from "../../cooperative";
 import { kiCadArcThrough } from "./arc";
 import type { KiCadBoardIndex } from "../syntax/index";
@@ -8,25 +11,7 @@ import {
   kiCadChild,
   kiCadNumber,
   KiCadExpressionReader,
-  type KiCadExpression,
 } from "../syntax/sexpr";
-const colors = [
-  "#58b5ed",
-  "#83ce94",
-  "#edb963",
-  "#ba8bec",
-  "#eb819d",
-  "#54c7bd",
-];
-const required = (node: KiCadExpression, name: string) => {
-  const child = kiCadChild(node, name);
-  if (!child) throw new Error(`KiCad ${node.head} 缺少 ${name}`);
-  return child;
-};
-const position = (node: KiCadExpression): Point => [
-  kiCadNumber(node, 0),
-  -kiCadNumber(node, 1),
-];
 const counts = (index: KiCadBoardIndex, name: string) =>
   index.items.get(name) ?? [];
 export interface KiCadRouteModel {
@@ -43,81 +28,25 @@ export interface KiCadRouteModel {
 /** KiCad board tracks and drilled vias. Names, not numeric layer slots, are
  * authoritative: newer files renumber B.Cu and use named net references. */
 export class KiCadRouteBuilder {
-  constructor(private readonly index: KiCadBoardIndex) {}
+  constructor(
+    private readonly index: KiCadBoardIndex,
+    private readonly context?: KiCadSceneContext,
+  ) {}
   async build(signal?: AbortSignal): Promise<KiCadRouteModel> {
     const { index } = this;
     const expressions = new KiCadExpressionReader(index.bytes);
     signal?.throwIfAborted();
-    const layerSpans = counts(index, "layers");
-    if (layerSpans.length !== 1) throw new Error("KiCad 层表缺失或重复");
-    const layerNode = expressions.read(layerSpans[0]);
-    const layers: Layer[] = [],
-      layerIds = new Map<string, number>();
-    for (const value of layerNode.values) {
-      if (typeof value === "string") continue;
-      const name = kiCadAtom(value, 0);
-      if (!name.endsWith(".Cu")) continue;
-      if (layerIds.has(name)) throw new Error(`KiCad 重复铜层 ${name}`);
-      const id = layers.length;
-      layerIds.set(name, id);
-      layers.push({
-        id,
-        name,
-        color: colors[id % colors.length],
-        layerFunction: "conductor",
-      });
-    }
-    if (layers.length < 2) throw new Error("KiCad 缺少至少两个铜层");
-    const nets = new Map<number, string>(),
-      netNames = new Map<string, number>();
-    for (const span of counts(index, "net")) {
-      const node = expressions.read(span),
-        id = kiCadNumber(node, 0),
-        name = kiCadAtom(node, 1);
-      if (!Number.isSafeInteger(id) || id < 0 || nets.has(id))
-        throw new Error(`KiCad 网络编号无效 ${id}`);
-      if (id !== 0) {
-        nets.set(id, name);
-        netNames.set(name, id);
-      }
-    }
-    let nextNet = Math.max(0, ...nets.keys()) + 1;
-    const netId = (node: KiCadExpression) => {
-      const field = kiCadChild(node, "net");
-      if (!field) return 0;
-      const value = kiCadAtom(field);
-      if (/^\d+$/.test(value)) {
-        const id = Number(value);
-        if (id === 0) return 0;
-        if (!nets.has(id)) throw new Error(`KiCad 网络编号没有定义 ${id}`);
-        return id;
-      }
-      if (!value) return 0;
-      let id = netNames.get(value);
-      if (id === undefined) {
-        id = nextNet++;
-        netNames.set(value, id);
-        nets.set(id, value);
-      }
-      return id;
-    };
+    const context =
+      this.context ?? (await KiCadSceneContext.read(index, signal));
+    const { layers, nets, layerIds } = context;
     const layerId = (name: string) => {
       const id = layerIds.get(name);
       if (id === undefined) throw new Error(`KiCad 走线引用未知铜层 ${name}`);
       return id;
     };
-    const bounds: Bounds = {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-    };
-    const include = (box: Bounds) => {
-      bounds.minX = Math.min(bounds.minX, box.minX);
-      bounds.minY = Math.min(bounds.minY, box.minY);
-      bounds.maxX = Math.max(bounds.maxX, box.maxX);
-      bounds.maxY = Math.max(bounds.maxY, box.maxY);
-    };
+    const extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
+    const include = extent.include;
     const segments: Segment[] = [],
       vias: Via[] = [],
       pause = cooperative(signal);
@@ -145,7 +74,7 @@ export class KiCadRouteBuilder {
           id: 0x40000000 + segments.length,
           trackId: 0x40000000 + segments.length,
           layer,
-          net: netId(node),
+          net: context.net(node),
           a,
           b,
           width,
@@ -164,7 +93,7 @@ export class KiCadRouteBuilder {
           }
         }
         segments.push(segment);
-        include(new SegmentShape(segment).bounds());
+        extent.includeSegment(segment);
       }
     }
     for (const span of counts(index, "via")) {
@@ -189,7 +118,7 @@ export class KiCadRouteBuilder {
         throw new Error(`KiCad Via 层跨度无效 @${span.start}`);
       const via: Via = {
         id: 0x50000000 + vias.length,
-        net: netId(node),
+        net: context.net(node),
         at,
         padstack: vias.length,
         drill,

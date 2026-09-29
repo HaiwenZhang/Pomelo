@@ -1,10 +1,9 @@
-import { completeSteps } from "../../iteration";
+import { decodeAllegroSegment } from "./segment";
+import { completeSteps, completeStepsAsync } from "../../iteration";
 import type { Point, Segment } from "../../board/model";
-import { ArcShape } from "../../board/shapes/arc";
 import { PathShape } from "../../board/shapes/path";
 import { isRecordType, type AllegroRecord } from "../binary/record-types";
 import type { BrdDatabase } from "../database";
-import { cooperative } from "../../cooperative";
 import { parserError } from "../../parser-error";
 type ShapeContourSource = Pick<
   AllegroRecord<0x28>,
@@ -36,44 +35,7 @@ export class AllegroGeometryDecoder {
       seen.add(key);
       const r = db.get(key);
       if (!r || !isRecordType(r, [1, 21, 22, 23] as const)) break;
-      const a: Point = [r.StartX * scale, r.StartY * scale],
-        b: Point = [r.EndX * scale, r.EndY * scale];
-      const segment: Segment = {
-        id: r.Key,
-        trackId: 0,
-        layer: -1,
-        net: 0,
-        a,
-        b,
-        width: r.Width * scale,
-      };
-      if (r.type === 1) {
-        const roundGrid = (value: number) => {
-          const lower = Math.floor(value);
-          return value - lower === 0.5
-            ? lower % 2 === 0
-              ? lower
-              : lower + 1
-            : Math.round(value);
-        };
-        const center: Point = [
-          (hatch ? roundGrid(r.CenterX) : r.CenterX) * scale,
-          (hatch ? roundGrid(r.CenterY) : r.CenterY) * scale,
-        ];
-        const radius = hatch
-          ? (Math.hypot(a[0] - center[0], a[1] - center[1]) +
-              Math.hypot(b[0] - center[0], b[1] - center[1])) /
-            2
-          : Math.hypot(a[0] - center[0], a[1] - center[1]);
-        const start = Math.atan2(a[1] - center[1], a[0] - center[0]),
-          end = Math.atan2(b[1] - center[1], b[0] - center[0]);
-        segment.arc = {
-          center,
-          radius,
-          start,
-          sweep: ArcShape.sweep(start, end, (r.SubType & 64) !== 0),
-        };
-      }
+      const segment = decodeAllegroSegment(r, scale, hatch);
       result.push(segment);
       key = r.Next;
       if ((result.length & 255) === 0) yield;
@@ -133,19 +95,6 @@ export class AllegroGeometryDecoder {
     source: number | ShapeContourSource,
     signal?: AbortSignal,
   ) {
-    const pauseIfNeeded = cooperative(signal, 10),
-      steps = this.contourSteps(source);
-    signal?.throwIfAborted();
-    try {
-      let step = steps.next();
-      while (!step.done) {
-        const pause = pauseIfNeeded();
-        if (pause) await pause;
-        step = steps.next();
-      }
-      return step.value;
-    } finally {
-      steps.return({ paths: [], rings: [] });
-    }
+    return completeStepsAsync(this.contourSteps(source), signal, 10);
   }
 }

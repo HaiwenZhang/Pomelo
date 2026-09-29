@@ -1,3 +1,4 @@
+import { PadsLayerMap } from "./layer-map";
 import type { Via } from "../../board/model";
 import type { PadsLayer } from "../binary/metadata";
 import type { PadsPadstack } from "../binary/padstack";
@@ -9,13 +10,14 @@ import { cooperative } from "../../cooperative";
 export function padsViaSpan(
   stack: Pick<PadsPadstack, "drillStart" | "drillEnd">,
   layers: PadsLayer[],
+  layerMap = new PadsLayerMap(layers),
 ): [number, number] {
-  const copper = layers.filter((l) => l.type === 1);
+  const { copper, physical } = layerMap;
   if (copper.length < 2) throw new Error("PADS Via 缺少至少两个铜层");
   if (stack.drillStart === 0 && stack.drillEnd === 0)
     return [0, copper.length - 1];
-  const a = copper.findIndex((l) => l.id === stack.drillStart),
-    b = copper.findIndex((l) => l.id === stack.drillEnd);
+  const a = physical.get(stack.drillStart) ?? -1,
+    b = physical.get(stack.drillEnd) ?? -1;
   if (a < 0 || b < 0 || a === b)
     throw new Error(
       `PADS Via 层跨度无效 ${stack.drillStart}:${stack.drillEnd}`,
@@ -27,6 +29,7 @@ export class PadsViaBuilder {
     private readonly input: {
       version: number;
       layers: PadsLayer[];
+      layerMap?: PadsLayerMap;
       stacks: PadsPadstack[];
       footprints: PadsFootprint[];
       junctions: Awaited<ReturnType<typeof readPadsJunctions>>["vias"];
@@ -34,6 +37,7 @@ export class PadsViaBuilder {
   ) {}
   async build(signal?: AbortSignal) {
     const { input } = this;
+    const layerMap = input.layerMap ?? new PadsLayerMap(input.layers);
     const pause = cooperative(signal);
     signal?.throwIfAborted();
     const vias: Via[] = [],
@@ -60,7 +64,7 @@ export class PadsViaBuilder {
         (stack.drill > 0 && stack.plated === undefined)
       )
         throw new Error(`PADS Via 孔定义不完整 ${source.junction}`);
-      let [startLayer, endLayer] = padsViaSpan(stack, input.layers);
+      let [startLayer, endLayer] = padsViaSpan(stack, input.layers, layerMap);
       const id = 0x3c000000 + source.junction;
       // A stack of blind/buried vias can share XY. Merge only identical source
       // definitions and networks, retaining every collapsed source ID as an alias.
@@ -77,7 +81,13 @@ export class PadsViaBuilder {
         continue;
       }
       seen.set(key, id);
-      const resolved = resolvePadsPadLayers(stack, input.layers, input.version);
+      const resolved = resolvePadsPadLayers(
+        stack,
+        input.layers,
+        input.version,
+        false,
+        layerMap,
+      );
       for (const d of resolved.unresolved)
         if (d.layer >= startLayer && d.layer <= endLayer)
           diagnostics.push(`PADS Via ${source.junction}: ${d.reason}`);

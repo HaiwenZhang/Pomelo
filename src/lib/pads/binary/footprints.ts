@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 import type { PadsContainer } from "./container";
 import {
   PADS_BASIC_TO_MM,
@@ -34,20 +35,9 @@ export class PadsFootprintReader {
       diagnostics: string[] = [],
       legacy = version === 0x2011;
     signal?.throwIfAborted();
-    const range = (at: number, n: number) => {
-      if (
-        !Number.isSafeInteger(at) ||
-        !Number.isSafeInteger(n) ||
-        at < 0 ||
-        n < 0 ||
-        at > view.byteLength - n
-      )
-        throw new Error(`PADS 封装字段越界 ${at}+${n}`);
-    };
-    const i32 = (at: number) => {
-      range(at, 4);
-      return view.getInt32(at, true);
-    };
+    const reader = new PadsBinaryView(view, "封装字段"),
+      range = reader.range,
+      i32 = reader.i32;
     const name = (at: number, n: number): PadsName => {
       range(at, n);
       const bytes = new Uint8Array(view.buffer, view.byteOffset + at, n),

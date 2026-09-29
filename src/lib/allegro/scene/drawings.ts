@@ -1,10 +1,5 @@
-import type {
-  BoardDrawing,
-  BoardText,
-  Point,
-  Segment,
-} from "../../board/model";
-import { ArcShape } from "../../board/shapes/arc";
+import { decodeAllegroSegment } from "../decoders/segment";
+import type { BoardDrawing, BoardText } from "../../board/model";
 import { isRecordType, type AllegroRecord } from "../binary/record-types";
 import type { BrdDatabase } from "../database";
 import { cooperative } from "../../cooperative";
@@ -78,35 +73,12 @@ export class AllegroDrawingBuilder {
           diagnostics.push(`尺寸图形 ${graphic.Key} 缺失或无效路径引用 ${key}`);
           break;
         }
-        const a: Point = [record.StartX * scale, record.StartY * scale],
-          b: Point = [record.EndX * scale, record.EndY * scale];
-        const segment: Segment = {
-          id: record.Key,
-          trackId: 0,
-          layer: DIMENSION_LAYER,
-          net: 0,
-          a,
-          b,
-          width: record.Width * scale,
-        };
-        if (record.type === 1) {
-          const center: Point = [
-            record.CenterX * scale,
-            record.CenterY * scale,
-          ];
-          const start = Math.atan2(a[1] - center[1], a[0] - center[0]),
-            end = Math.atan2(b[1] - center[1], b[0] - center[0]);
-          segment.arc = {
-            center,
-            radius: Math.hypot(a[0] - center[0], a[1] - center[1]),
-            start,
-            sweep: ArcShape.sweep(start, end, (record.SubType & 64) !== 0),
-          };
-        }
+        const segment = decodeAllegroSegment(record, scale);
+        segment.layer = DIMENSION_LAYER;
         if (
           ![
-            ...a,
-            ...b,
+            ...segment.a,
+            ...segment.b,
             segment.width,
             ...(segment.arc
               ? [

@@ -1,6 +1,12 @@
+import { KiCadSceneContext } from "./context";
+import {
+  kiCadRequired as required,
+  kiCadPosition as position,
+  kiCadNumberOr as number,
+} from "./fields";
+import { BoundsAccumulator } from "../../board/bounds";
 import type { Bounds, Layer, PadShape, Pin, Point } from "../../board/model";
-import { DrillShape } from "../../board/shapes/drill";
-import { PadShape as PadShapeGeometry } from "../../board/shapes/pad";
+
 import { PointShape } from "../../board/shapes/point";
 import { cooperative } from "../../cooperative";
 import type { KiCadBoardIndex } from "../syntax/index";
@@ -12,17 +18,6 @@ import {
   KiCadExpressionReader,
   type KiCadExpression,
 } from "../syntax/sexpr";
-const required = (node: KiCadExpression, name: string) => {
-  const child = kiCadChild(node, name);
-  if (!child) throw new Error(`KiCad ${node.head} 缺少 ${name}`);
-  return child;
-};
-const position = (node: KiCadExpression): Point => [
-  kiCadNumber(node, 0),
-  -kiCadNumber(node, 1),
-];
-const number = (node: KiCadExpression, index: number, otherwise = 0) =>
-  node.values.length > index ? kiCadNumber(node, index) : otherwise;
 const shapeType = (name: string) => {
   const type: Record<string, number> = {
     circle: 2,
@@ -51,33 +46,13 @@ export class KiCadPadBuilder {
   constructor(
     private readonly index: KiCadBoardIndex,
     private readonly layers: Layer[],
-    private readonly nets: Map<number, string>,
+    nets: Map<number, string>,
+    private readonly context = new KiCadSceneContext(layers, nets),
   ) {}
   async build(signal?: AbortSignal): Promise<KiCadPadModel> {
-    const { index, layers, nets } = this;
+    const { index, layers } = this;
     const expressions = new KiCadExpressionReader(index.bytes);
-    const layerIds = new Map(layers.map((layer) => [layer.name, layer.id]));
-    const netNames = new Map([...nets].map(([id, name]) => [name, id]));
-    let nextNet = Math.max(0, ...nets.keys()) + 1;
-    const resolveNet = (pad: KiCadExpression) => {
-      const field = kiCadChild(pad, "net");
-      if (!field) return 0;
-      const value = kiCadAtom(field);
-      if (/^\d+$/.test(value)) {
-        const id = Number(value);
-        if (id !== 0 && !nets.has(id))
-          throw new Error(`KiCad 焊盘引用未知网络 ${id}`);
-        return id;
-      }
-      if (!value) return 0;
-      let id = netNames.get(value);
-      if (id === undefined) {
-        id = nextNet++;
-        nets.set(id, value);
-        netNames.set(value, id);
-      }
-      return id;
-    };
+    const { layerIds } = this.context;
     const copperLayers = (field: KiCadExpression) => {
       const ids = new Set<number>();
       for (const value of field.values) {
@@ -96,23 +71,13 @@ export class KiCadPadBuilder {
       return [...ids].sort((a, b) => a - b);
     };
     const pins: Pin[] = [],
-      bounds: Bounds = {
-        minX: Infinity,
-        minY: Infinity,
-        maxX: -Infinity,
-        maxY: -Infinity,
-      };
+      extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
     let sourcePads = 0,
       customPads = 0,
       zeroCopperPads = 0,
       offsetDrills = 0,
       layerOverrides = 0;
-    const include = (box: Bounds) => {
-      bounds.minX = Math.min(bounds.minX, box.minX);
-      bounds.minY = Math.min(bounds.minY, box.minY);
-      bounds.maxX = Math.max(bounds.maxX, box.maxX);
-      bounds.maxY = Math.max(bounds.maxY, box.maxY);
-    };
     const pause = cooperative(signal),
       footprints = index.items.get("footprint") ?? [];
     for (
@@ -252,7 +217,7 @@ export class KiCadPadBuilder {
         const id = 0x70000000 + sourceId,
           pin: Pin = {
             id,
-            net: resolveNet(pad),
+            net: this.context.net(pad),
             name,
             reference: ref,
             at,
@@ -268,10 +233,7 @@ export class KiCadPadBuilder {
             plated: kind !== "np_thru_hole",
           };
         pins.push(pin);
-        for (const shape of shapes)
-          include(new PadShapeGeometry(shape).bounds(pin));
-        const hole = new DrillShape(pin).pad();
-        if (hole) include(new PadShapeGeometry(hole).bounds(pin));
+        extent.includePadOwner(pin);
       }
     }
     return {

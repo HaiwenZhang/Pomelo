@@ -1,3 +1,4 @@
+import { PadsLayerMap } from "./layer-map";
 import type { PadShape, Pin } from "../../board/model";
 import { PathShape } from "../../board/shapes/path";
 import { cooperative } from "../../cooperative";
@@ -55,6 +56,7 @@ export class PadsPinBuilder {
     private readonly input: {
       version: number;
       layers: PadsLayer[];
+      layerMap?: PadsLayerMap;
       placements: PadsPlacement[];
       stacks: PadsPadstack[];
       footprints: PadsFootprint[];
@@ -72,6 +74,7 @@ export class PadsPinBuilder {
   ) {}
   async build(signal?: AbortSignal) {
     const { input } = this;
+    const layerMap = input.layerMap ?? new PadsLayerMap(input.layers);
     const pause = cooperative(signal);
     signal?.throwIfAborted();
     const instances = new Map(
@@ -114,6 +117,7 @@ export class PadsPinBuilder {
         input.layers,
         input.version,
         part.bottom,
+        layerMap,
       );
       for (const d of resolved.unresolved)
         diagnostics.push(`PADS ${key} 层 ${d.layer}: ${d.reason}`);

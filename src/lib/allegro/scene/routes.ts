@@ -1,8 +1,7 @@
+import { decodeAllegroSegment } from "../decoders/segment";
 import { isRecordType } from "../binary/record-types";
 import { BOND_WIRE_TOP_LAYER } from "../../board/layers";
 import type { Segment, SpecialLayer } from "../../board/model";
-import { ArcShape } from "../../board/shapes/arc";
-import { SegmentShape } from "../../board/shapes/segment";
 import { parserError } from "../../parser-error";
 import { AllegroBondWireResolver } from "../decoders/bond-wire";
 import type { AllegroSceneContext } from "./context";
@@ -104,35 +103,11 @@ export async function buildRoutes(
         diagnostics.push(`走线 ${track.Key} 的链表遇到类型 ${record.type}`);
         break;
       }
-      const a = point(record.StartX, record.StartY),
-        b = point(record.EndX, record.EndY);
-      const segment: Segment = {
-        id: record.Key,
-        trackId: track.Key,
-        layer,
-        net: assignments.get(track.Key) ?? 0,
-        a,
-        b,
-        width: record.Width * scale,
-      };
-      if (record.type === 1) {
-        const center = point(record.CenterX, record.CenterY),
-          radius = Math.hypot(a[0] - center[0], a[1] - center[1]);
-        const start = Math.atan2(a[1] - center[1], a[0] - center[0]),
-          end = Math.atan2(b[1] - center[1], b[0] - center[0]);
-        segment.arc = {
-          center,
-          radius,
-          start,
-          sweep: ArcShape.sweep(start, end, (record.SubType & 0x40) !== 0),
-        };
-        const box = new SegmentShape(segment).bounds();
-        include([box.minX, box.minY]);
-        include([box.maxX, box.maxY]);
-      } else {
-        include(a, segment.width / 2);
-        include(b, segment.width / 2);
-      }
+      const segment = decodeAllegroSegment(record, scale);
+      segment.trackId = track.Key;
+      segment.layer = layer;
+      segment.net = assignments.get(track.Key) ?? 0;
+      context.extent.includeSegment(segment);
       segments.push(segment);
       key = record.Next;
       if ((segments.length & 255) === 0) {

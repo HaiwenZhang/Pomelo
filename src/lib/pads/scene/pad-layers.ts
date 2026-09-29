@@ -1,3 +1,4 @@
+import { PadsLayerMap } from "./layer-map";
 import type { PadsLayer } from "../binary/metadata";
 import type { PadsPadLayer, PadsPadstack } from "../binary/padstack";
 import { padsPadGeometry } from "./pad-geometry";
@@ -9,8 +10,9 @@ export function resolvePadsPadLayers(
   sourceLayers: PadsLayer[],
   version: number,
   bottom = false,
+  layerMap = new PadsLayerMap(sourceLayers),
 ) {
-  const copper = sourceLayers.filter((l) => l.type === 1);
+  const { copper, physical } = layerMap;
   if (!copper.length) throw new Error("PADS 缺少铜层");
   const geometries: {
     layer: number;
@@ -52,8 +54,8 @@ export function resolvePadsPadLayers(
       for (let i = 1; i < copper.length - 1; i++) put(i, row, 1);
     } else {
       const id = row.selector + (version <= 0x2021 ? 1 : 0),
-        index = copper.findIndex((l) => l.id === id);
-      if (index < 0) nonCopper.push(row);
+        index = physical.get(id);
+      if (index === undefined) nonCopper.push(row);
       else put(index, row, 2);
     }
   }

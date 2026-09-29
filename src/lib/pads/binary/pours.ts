@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 import type { PadsContainer } from "./container";
 import { PADS_BASIC_TO_MM } from "./metadata";
 import { cooperative } from "../../cooperative";
@@ -26,12 +27,9 @@ export class PadsPourReader {
     ])
       if (s[section].bytes !== s[section].count * stride)
         throw new Error(`PADS 铺铜记录尺寸无效 ${section}`);
-    const u = (at: number) => {
-        if (at < 0 || at > view.byteLength - 4)
-          throw new Error("PADS 铺铜字段越界");
-        return view.getUint32(at, true);
-      },
-      i = (at: number) => u(at) | 0;
+    const reader = new PadsBinaryView(view, "铺铜字段"),
+      u = reader.u32,
+      i = reader.i32;
     const owners: {
         index: number;
         nameBytes: number[];

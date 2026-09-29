@@ -1,5 +1,6 @@
+import { BoundsAccumulator } from "../board/bounds";
 import type { Bounds, Point, Segment } from "../board/model";
-import { SegmentShape } from "../board/shapes/segment";
+
 import {
   altiumProperty,
   type AltiumPropertiesRecord,
@@ -69,12 +70,8 @@ export class AltiumOutlineReader {
     }
     if (vertices.length < 3) throw new Error("Altium 物理板框顶点不足");
     const outline: Segment[] = [],
-      bounds: Bounds = {
-        minX: Infinity,
-        minY: Infinity,
-        maxX: -Infinity,
-        maxY: -Infinity,
-      };
+      extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
     let first: Point | undefined,
       last: Point | undefined,
       sourceArcs = 0;
@@ -91,11 +88,7 @@ export class AltiumOutlineReader {
         };
       if (arc) segment.arc = arc;
       outline.push(segment);
-      const box = new SegmentShape(segment).bounds();
-      bounds.minX = Math.min(bounds.minX, box.minX);
-      bounds.minY = Math.min(bounds.minY, box.minY);
-      bounds.maxX = Math.max(bounds.maxX, box.maxX);
-      bounds.maxY = Math.max(bounds.maxY, box.maxY);
+      extent.includeSegment(segment);
     };
     const connect = (to: Point) => {
       if (last && !same(last, to)) push(last, to);

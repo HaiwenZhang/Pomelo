@@ -26,8 +26,11 @@ export async function buildGraphics(
     if (
       (graphic.Layer & 255) === 1 &&
       [0xea, 0xfd].includes(graphic.Layer >>> 8)
-    )
-      outline.push(...geometry.readPath(graphic.SegmentPtr));
+    ) {
+      const path = geometry.readPath(graphic.SegmentPtr);
+      outline.push(...path);
+      for (const segment of path) context.extent.includeSegment(segment);
+    }
     if (graphic.Layer === 0xf901) dimensionGraphics.push(graphic);
     if ((++graphicWork & 255) === 0) {
       const pause = buildProgress.checkpoint();

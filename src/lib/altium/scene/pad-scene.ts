@@ -1,3 +1,5 @@
+import { AltiumLayerResolver } from "./layer-resolver";
+import { BoundsAccumulator } from "../../board/bounds";
 import type {
   BoardDrawing,
   Bounds,
@@ -7,7 +9,7 @@ import type {
   Point,
   Segment,
 } from "../../board/model";
-import { PadShape as PadShapeGeometry } from "../../board/shapes/pad";
+
 import { PointShape } from "../../board/shapes/point";
 import { cooperative } from "../../cooperative";
 import type { AltiumLayers } from "../layers";
@@ -46,43 +48,28 @@ type AltiumPadInput = {
   nets: Map<number, string>;
   components: AltiumPropertiesRecord[];
   board: AltiumPropertiesRecord;
+  layerResolver?: AltiumLayerResolver;
 };
 export class AltiumPadBuilder {
   constructor(private readonly input: AltiumPadInput) {}
   async build(signal?: AbortSignal): Promise<AltiumPadModel> {
     const { data, count, stack, nets, components, board } = this.input;
+    const resolver =
+      this.input.layerResolver ?? new AltiumLayerResolver(stack, board);
     const pins: Pin[] = [],
       drawings: BoardDrawing[] = [],
-      drawingLayers: DrawingLayer[] = [],
-      bounds: Bounds = {
-        minX: Infinity,
-        minY: Infinity,
-        maxX: -Infinity,
-        maxY: -Infinity,
-      };
-    const rawByLayer = new Map([...stack.v6].map(([raw, id]) => [id, raw]));
+      extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
+    const rawByLayer = resolver.rawByLayer;
     const pause = cooperative(signal);
     let nonCopperPads = 0,
       unsupportedShapes = 0,
       unsupportedHoles = 0,
       offsetHoles = 0,
       rotatedSlots = 0;
-    const drawingIds = new Set<number>();
     const drawNonCopper = (source: AltiumPad) => {
-      const layer = 0x20000 + source.layer,
+      const layer = resolver.drawing(source.layer),
         id = 0x69000000 + source.index;
-      if (!drawingIds.has(layer)) {
-        drawingIds.add(layer);
-        drawingLayers.push({
-          id: layer,
-          name:
-            altiumProperty(board, `LAYER${source.layer}NAME`) ??
-            `Altium Layer ${source.layer}`,
-          color: "#a7a9bd",
-          layerFunction: "unknown",
-          defaultVisible: true,
-        });
-      }
       const width = source.top.width,
         height = source.top.height;
       if (width <= 0 || height <= 0) return;
@@ -184,7 +171,7 @@ export class AltiumPadBuilder {
       const layers =
         source.layer === 74
           ? stack.layers.map((row) => row.id)
-          : [stack.v6.get(source.layer)].filter(
+          : [resolver.copper(source.layer)].filter(
               (id): id is number => id !== undefined,
             );
       if (!layers.length) {
@@ -272,18 +259,12 @@ export class AltiumPadBuilder {
         shapes,
       };
       pins.push(pin);
-      for (const pad of shapes) {
-        const box = new PadShapeGeometry(pad).bounds(pin);
-        bounds.minX = Math.min(bounds.minX, box.minX);
-        bounds.minY = Math.min(bounds.minY, box.minY);
-        bounds.maxX = Math.max(bounds.maxX, box.maxX);
-        bounds.maxY = Math.max(bounds.maxY, box.maxY);
-      }
+      extent.includePadOwner(pin);
     }
     return {
       pins,
       drawings,
-      drawingLayers,
+      drawingLayers: resolver.drawings,
       bounds,
       sourcePads: count,
       nonCopperPads,

@@ -139,7 +139,7 @@ export async function buildVias(
       placed.pads = effective;
     }
     vias.push(placed);
-    includePads(placed, placed.pads);
+    includePads(placed);
     const pause = buildProgress.checkpoint();
     if (pause) await pause;
   }

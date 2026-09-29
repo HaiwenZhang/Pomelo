@@ -1,8 +1,8 @@
-import type { BoardScene, Bounds } from "../board/model";
-import { DrillShape } from "../board/shapes/drill";
-import { PadShape } from "../board/shapes/pad";
-import { SegmentShape } from "../board/shapes/segment";
-import { ZoneShape } from "../board/shapes/zone";
+import { PadsLayerMap } from "./scene/layer-map";
+import { copperZoneFromMesh } from "../board/copper-zone";
+import { BoundsAccumulator } from "../board/bounds";
+import type { BoardScene } from "../board/model";
+
 import { cooperative } from "../cooperative";
 import { PadsConnectivityReader } from "./binary/connectivity";
 import { PadsContainerReader } from "./binary/container";
@@ -56,6 +56,7 @@ export async function importPads(
   progress?.("读取 PADS 容器");
   const container = new PadsContainerReader(data).read();
   const metadata = await new PadsMetadataReader(container).read(signal);
+  const layerMap = new PadsLayerMap(metadata.layers);
   const padstacks = await new PadsPadstackReader(container).read(signal);
   const footprints = await new PadsFootprintReader(
     container,
@@ -81,6 +82,7 @@ export async function importPads(
   const pins = await new PadsPinBuilder({
     version: container.version,
     layers: metadata.layers,
+    layerMap,
     placements: metadata.placements,
     stacks: padstacks,
     ...footprints,
@@ -90,6 +92,7 @@ export async function importPads(
   const vias = await new PadsViaBuilder({
     version: container.version,
     layers: metadata.layers,
+    layerMap,
     stacks: padstacks,
     footprints: footprints.footprints,
     junctions: junctions.vias,
@@ -103,6 +106,7 @@ export async function importPads(
   const segments = await new PadsRouteBuilder(
     routes.routes,
     metadata.layers,
+    layerMap,
   ).build(signal);
   const colors = [
     "#58b5ed",
@@ -112,7 +116,8 @@ export async function importPads(
     "#eb819d",
     "#54c7bd",
   ];
-  const copperLayers = metadata.layers.filter((layer) => layer.type === 1);
+  const copperLayers = layerMap.copper;
+  const extent = new BoundsAccumulator();
   const scene: BoardScene = {
     layers: copperLayers.map((layer, id) => ({
       id,
@@ -132,12 +137,7 @@ export async function importPads(
     outline: [],
     texts: [],
     drawingLayers: [],
-    bounds: {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-    },
+    bounds: extent.bounds,
     diagnostics: [
       ...metadata.diagnostics,
       ...footprints.diagnostics,
@@ -150,12 +150,6 @@ export async function importPads(
     scene.diagnostics.push(
       `PADS 网络端点未解析 ${entry.placement}:${entry.terminal}`,
     );
-  const include = (bounds: Bounds) => {
-    scene.bounds.minX = Math.min(scene.bounds.minX, bounds.minX);
-    scene.bounds.minY = Math.min(scene.bounds.minY, bounds.minY);
-    scene.bounds.maxX = Math.max(scene.bounds.maxX, bounds.maxX);
-    scene.bounds.maxY = Math.max(scene.bounds.maxY, bounds.maxY);
-  };
   const pause = cooperative(signal);
   let count = 0;
   for (const owner of [...scene.pins, ...scene.vias]) {
@@ -163,17 +157,14 @@ export async function importPads(
       const pending = pause();
       if (pending) await pending;
     }
-    for (const shape of "shapes" in owner ? owner.shapes : owner.pads)
-      include(new PadShape(shape).bounds(owner));
-    const hole = new DrillShape(owner).pad();
-    if (hole) include(new PadShape(hole).bounds(owner));
+    extent.includePadOwner(owner);
   }
   for (const segment of segments) {
     if (count++ % 512 === 0) {
       const pending = pause();
       if (pending) await pending;
     }
-    include(new SegmentShape(segment).bounds());
+    extent.includeSegment(segment);
   }
   progress?.("读取 PADS 板框");
   const outlines = await new PadsOutlineReader(container).read(signal);
@@ -181,7 +172,7 @@ export async function importPads(
   for (const segment of scene.outline) {
     const pending = pause();
     if (pending) await pending;
-    include(new SegmentShape(segment).bounds());
+    extent.includeSegment(segment);
   }
   if (!outlines.outlines.length)
     scene.diagnostics.push(
@@ -213,9 +204,7 @@ export async function importPads(
     scene.diagnostics.push(
       `PADS ${copper.boundaryOnly.length} 个设计铜区没有已保存填充，暂不重新铺铜`,
     );
-  const displayLayerIds = new Map(
-    copperLayers.map((layer, id) => [layer.id, id]),
-  );
+  const displayLayerIds = layerMap.physical;
   progress?.("构建 PADS 铜区几何");
   const fillDisplayLayers = copper.fills.map((fill) => {
     const displayLayer = displayLayerIds.get(fill.layer);
@@ -237,16 +226,16 @@ export async function importPads(
     if (pending) await pending;
     const layer = fillDisplayLayers[fillIndex];
     for (const mesh of meshes[fillIndex]) {
-      const zone = {
-        id: 0x50000000 + scene.zones.length,
-        layer,
-        net: fill.net === null ? 0 : fill.net + 1,
-        paths: [],
-        rings: [],
-        ...mesh,
-      };
+      const zone = copperZoneFromMesh(
+        {
+          id: 0x50000000 + scene.zones.length,
+          layer,
+          net: fill.net === null ? 0 : fill.net + 1,
+        },
+        mesh,
+      );
       scene.zones.push(zone);
-      include(new ZoneShape(zone).bounds());
+      extent.includeZone(zone);
     }
   }
   if (!Object.values(scene.bounds).every(Number.isFinite))

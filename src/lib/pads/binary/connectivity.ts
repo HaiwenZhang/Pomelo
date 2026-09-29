@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 import type { PadsContainer } from "./container";
 import type { PadsNet } from "./metadata";
 import type { PadsFootprint } from "./footprints";
@@ -21,11 +22,8 @@ export class PadsConnectivityReader {
       stride = legacy ? 48 : 68,
       pause = cooperative(signal);
     signal?.throwIfAborted();
-    const u = (at: number) => {
-      if (at < 0 || at > view.byteLength - 4)
-        throw new Error(`PADS 连接字段越界 ${at}`);
-      return view.getUint32(at, true);
-    };
+    const reader = new PadsBinaryView(view, "连接字段"),
+      u = reader.u32;
     const half = (at: number) => u(at) & 65535;
     if (s.declaredBytes !== s.count * stride)
       throw new Error("PADS 连接记录尺寸无效");

@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 import type { PadsContainer } from "./container";
 import { PADS_BASIC_TO_MM, type PadsNet } from "./metadata";
 import type { PadsFootprint } from "./footprints";
@@ -15,14 +16,9 @@ export class PadsJunctionReader {
     const { view, sections } = container,
       pause = cooperative(signal);
     signal?.throwIfAborted();
-    const range = (at: number, n: number) => {
-      if (at < 0 || n < 0 || at > view.byteLength - n)
-        throw new Error(`PADS 接点字段越界 ${at}+${n}`);
-    };
-    const u32 = (at: number) => {
-      range(at, 4);
-      return view.getUint32(at, true);
-    };
+    const reader = new PadsBinaryView(view, "接点字段"),
+      range = reader.range,
+      u32 = reader.u32;
     const s = sections[49],
       end = s.offset + s.bytes;
     range(s.offset, s.bytes);

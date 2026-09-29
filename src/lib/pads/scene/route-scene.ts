@@ -1,3 +1,4 @@
+import { PadsLayerMap } from "./layer-map";
 import type { Segment } from "../../board/model";
 import type { PadsLayer } from "../binary/metadata";
 import type { PadsRoute } from "../binary/routes";
@@ -5,15 +6,14 @@ import { cooperative } from "../../cooperative";
 export class PadsRouteBuilder {
   constructor(
     private readonly routes: PadsRoute[],
-    private readonly layers: PadsLayer[],
+    layers: PadsLayer[],
+    private readonly layerMap = new PadsLayerMap(layers),
   ) {}
   async build(signal?: AbortSignal) {
-    const { routes, layers } = this;
+    const { routes } = this;
     const pause = cooperative(signal);
     signal?.throwIfAborted();
-    const physical = new Map(
-        layers.filter((l) => l.type === 1).map((l, i) => [l.id, i]),
-      ),
+    const physical = this.layerMap.physical,
       segments: Segment[] = [],
       objects = new Set<number>();
     for (const route of routes) {

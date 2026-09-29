@@ -1,3 +1,5 @@
+import { kiCadRequired as required, kiCadPosition as point } from "./fields";
+import { BoundsAccumulator } from "../../board/bounds";
 import type {
   BoardDrawing,
   Bounds,
@@ -5,7 +7,7 @@ import type {
   Point,
   Segment,
 } from "../../board/model";
-import { SegmentShape } from "../../board/shapes/segment";
+
 import { cooperative } from "../../cooperative";
 import { kiCadArcThrough } from "./arc";
 import type { KiCadBoardIndex } from "../syntax/index";
@@ -14,17 +16,7 @@ import {
   kiCadChild,
   kiCadNumber,
   KiCadExpressionReader,
-  type KiCadExpression,
 } from "../syntax/sexpr";
-const point = (node: KiCadExpression): Point => [
-  kiCadNumber(node, 0),
-  -kiCadNumber(node, 1),
-];
-const required = (node: KiCadExpression, name: string) => {
-  const child = kiCadChild(node, name);
-  if (!child) throw new Error(`KiCad ${node.head} 缺少 ${name}`);
-  return child;
-};
 export interface KiCadOutlineModel {
   outline: Segment[];
   drawings: BoardDrawing[];
@@ -46,12 +38,8 @@ export class KiCadOutlineBuilder {
       drawings: BoardDrawing[] = [],
       drawingLayers: DrawingLayer[] = [],
       drawingIds = new Map<string, number>();
-    const bounds: Bounds = {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-    };
+    const extent = new BoundsAccumulator(),
+      bounds = extent.bounds;
     let sourceGraphics = 0,
       edgeGraphics = 0,
       filledGraphics = 0,
@@ -80,11 +68,7 @@ export class KiCadOutlineBuilder {
       if (arc) segment.arc = arc;
       if (drawing) drawing.segments.push(segment);
       else outline.push(segment);
-      const box = new SegmentShape(segment).bounds();
-      bounds.minX = Math.min(bounds.minX, box.minX);
-      bounds.minY = Math.min(bounds.minY, box.minY);
-      bounds.maxX = Math.max(bounds.maxX, box.maxX);
-      bounds.maxY = Math.max(bounds.maxY, box.maxY);
+      extent.includeSegment(segment);
     };
     for (const kind of [
       "gr_line",

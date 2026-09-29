@@ -1,5 +1,7 @@
+import { KiCadSceneContext } from "./scene/context";
+import { BoundsAccumulator } from "../board/bounds";
 import type { BoardScene, Bounds } from "../board/model";
-import { SegmentShape } from "../board/shapes/segment";
+
 import { KiCadBoardIndexer } from "./syntax/index";
 import { KiCadOutlineBuilder } from "./scene/outline";
 import { KiCadPadBuilder } from "./scene/pads";
@@ -28,40 +30,35 @@ export async function importKiCad(
 }> {
   progress?.("索引 KiCad 对象");
   const index = await new KiCadBoardIndexer(new Uint8Array(data)).read(signal);
+  const context = await KiCadSceneContext.read(index, signal);
   progress?.("读取 KiCad 走线与过孔");
-  const routes = await new KiCadRouteBuilder(index).build(signal);
+  const routes = await new KiCadRouteBuilder(index, context).build(signal);
   progress?.("读取 KiCad 器件焊盘");
   const pads = await new KiCadPadBuilder(
     index,
     routes.layers,
     routes.nets,
+    context,
   ).build(signal);
   progress?.("读取 KiCad 已保存铜区");
   const fills = await new KiCadZoneBuilder(
     index,
     routes.layers,
     routes.nets,
+    context,
   ).build(signal);
   progress?.("读取 KiCad 板框与图形");
   const graphics = await new KiCadOutlineBuilder(index).build(signal);
-  const bounds: Bounds = {
-    minX: Infinity,
-    minY: Infinity,
-    maxX: -Infinity,
-    maxY: -Infinity,
-  };
+  const extent = new BoundsAccumulator(),
+    bounds = extent.bounds;
   const include = (box: Bounds) => {
     if (!Object.values(box).every(Number.isFinite)) return;
-    bounds.minX = Math.min(bounds.minX, box.minX);
-    bounds.minY = Math.min(bounds.minY, box.minY);
-    bounds.maxX = Math.max(bounds.maxX, box.maxX);
-    bounds.maxY = Math.max(bounds.maxY, box.maxY);
+    extent.include(box);
   };
   include(routes.bounds);
   include(pads.bounds);
   include(fills.bounds);
-  for (const segment of graphics.outline)
-    include(new SegmentShape(segment).bounds());
+  for (const segment of graphics.outline) extent.includeSegment(segment);
   if (!Object.values(bounds).every(Number.isFinite)) include(graphics.bounds);
   if (!Object.values(bounds).every(Number.isFinite))
     throw new Error("KiCad 文件没有可绘制几何");

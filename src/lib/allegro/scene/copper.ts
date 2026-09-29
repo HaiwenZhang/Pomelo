@@ -1,5 +1,5 @@
 import { isRecordType } from "../binary/record-types";
-import { CopperMesh } from "../../board/copper-mesh";
+import { createCopperZone } from "../../board/copper-zone";
 import type { Point, SceneBuildEvent, Segment, Zone } from "../../board/model";
 import { SegmentShape } from "../../board/shapes/segment";
 import { ZoneShape } from "../../board/shapes/zone";
@@ -38,10 +38,7 @@ export async function buildCopper(
     if (classId === 1 && [0xea, 0xfd].includes(layer)) {
       const path = geometry.readPath(shape.FirstSegmentPtr);
       outline.push(...path);
-      for (const s of path) {
-        include(s.a);
-        include(s.b);
-      }
+      for (const s of path) context.extent.includeSegment(s);
       continue;
     }
     // The net connection chain contains the stored computed copper, not just the
@@ -116,22 +113,17 @@ export async function buildCopper(
       rings: rings.length,
       vertices: rings.reduce((sum, ring) => sum + ring.length, 0),
     });
-    const mesh = await new CopperMesh(rings).build(signal, paths),
-      zone: Zone = {
-        id: shape.Key,
-        layer,
-        net: assignments.get(shape.Key)!,
-        paths,
-        rings: [],
-        ...mesh,
-      };
+    const zone = await createCopperZone(
+      { id: shape.Key, layer, net: assignments.get(shape.Key)!, paths, rings },
+      signal,
+    );
     zones.push(zone);
     trace?.({
       stage: "铜皮三角化",
       event: "end",
       id: shape.Key,
       ms: performance.now() - meshStart,
-      triangles: mesh.indices.length / 3,
+      triangles: zone.indices.length / 3,
     });
     const b = new ZoneShape(zone).bounds();
     include([b.minX, b.minY]);
@@ -174,15 +166,16 @@ export async function buildCopper(
         b: corners[(index + 1) % corners.length],
         width: 0,
       }));
-      const mesh = await new CopperMesh([corners]).build(signal, [path]),
-        zone: Zone = {
+      const zone = await createCopperZone(
+        {
           id: rect.Key,
           layer,
           net: assignments.get(rect.Key)!,
           paths: [path],
-          rings: [],
-          ...mesh,
-        };
+          rings: [corners],
+        },
+        signal,
+      );
       zones.push(zone);
       const box = new ZoneShape(zone).bounds();
       include([box.minX, box.minY]);

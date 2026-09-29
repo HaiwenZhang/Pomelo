@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 import { cooperative } from "../../cooperative";
 import type { PadsContainer } from "./container";
 export const PADS_BASIC_TO_MM = 0.0254 / 38100;
@@ -42,29 +43,11 @@ export class PadsMetadataReader {
       diagnostics: string[] = [],
       legacy = version === 0x2011;
     signal?.throwIfAborted();
-    const bounds = (at: number, size: number) => {
-      if (
-        at < 0 ||
-        !Number.isSafeInteger(at) ||
-        size < 0 ||
-        at > view.byteLength - size
-      )
-        throw new Error(`PADS 字段越界 ${at}+${size}`);
-    };
-    const u32 = (at: number) => {
-      bounds(at, 4);
-      return view.getUint32(at, true);
-    };
-    const i32 = (at: number) => {
-      bounds(at, 4);
-      return view.getInt32(at, true);
-    };
-    const f32 = (at: number) => {
-      bounds(at, 4);
-      const v = view.getFloat32(at, true);
-      if (!Number.isFinite(v)) throw new Error(`PADS 浮点值无效 ${at}`);
-      return v;
-    };
+    const reader = new PadsBinaryView(view, "字段"),
+      bounds = reader.range,
+      u32 = reader.u32,
+      i32 = reader.i32,
+      f32 = reader.f32;
     const name = (at: number, length: number): PadsName => {
       bounds(at, length);
       const field = new Uint8Array(view.buffer, view.byteOffset + at, length),

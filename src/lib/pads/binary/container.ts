@@ -1,3 +1,4 @@
+import { PadsBinaryView } from "./view";
 /** PADS SDB framing. Layout evidence: KiCad pads_sdb.cpp and local corpus.
  * This module resolves byte extents only; no geometry is inferred from counts. */
 export interface PadsSection {
@@ -21,20 +22,9 @@ export class PadsContainerReader {
     const { buffer } = this;
     const view = new DataView(buffer),
       size = buffer.byteLength;
-    const range = (offset: number, bytes: number) => {
-      if (
-        !Number.isSafeInteger(offset) ||
-        !Number.isSafeInteger(bytes) ||
-        offset < 0 ||
-        bytes < 0 ||
-        offset > size - bytes
-      )
-        throw new Error(`PADS 数据越界 ${offset}+${bytes}/${size}`);
-    };
-    const u32 = (at: number) => {
-      range(at, 4);
-      return view.getUint32(at, true);
-    };
+    const reader = new PadsBinaryView(view, "数据"),
+      range = reader.range,
+      u32 = reader.u32;
     range(0, 52);
     if (view.getUint8(0) !== 0 || view.getUint8(1) !== 255)
       throw new Error("PADS 二进制签名无效");
