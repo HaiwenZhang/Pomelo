@@ -128,7 +128,7 @@ export class BoardLabelLayout {
           cos,
           sin,
           horizontalSign,
-          Number(independentOpacity),
+          (g.page ?? 0) * 2 + Number(independentOpacity),
         );
       }
       pen += g.advance * height;

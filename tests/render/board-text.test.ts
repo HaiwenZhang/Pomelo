@@ -6,7 +6,16 @@ import { AllegroTextRecordDecoder } from "../../src/lib/allegro/decoders/text-re
 
 import type { BoardText } from "../../src/lib/board/model";
 
-import { BoardTextStrokeBuilder } from "../../src/lib/text/board-text-stroke-builder";
+import {
+  BoardTextGlyphBuilder,
+  glyphCorners,
+} from "../../src/lib/text/board-text-glyph-builder";
+
+const fixtureFont = {
+  size: 42,
+  range: 4,
+  glyphs: { M: { uv: [0, 0, 1, 1], plane: [0, 0, 1, 0.733], advance: 1 } },
+};
 
 const metrics = {
   Height: 5000,
@@ -30,9 +39,9 @@ const text = () =>
     metrics,
   );
 
-test("long single texts yield before expanding all strokes, including whitespace-only runs", () => {
+test("long single texts yield before expanding all glyphs, including whitespace-only runs", () => {
   for (const value of ["A".repeat(10000), " ".repeat(10000)]) {
-    const steps = BoardTextStrokeBuilder.buildSteps({ ...text(), text: value });
+    const steps = BoardTextGlyphBuilder.buildSteps({ ...text(), text: value });
     let strokes = 0;
     while (true) {
       const step = steps.next();
@@ -139,7 +148,7 @@ test("modern text chains accept other declared header tails but still diagnose m
   expect(diagnostics).toStrictEqual(["文字链缺失引用 113"]);
 });
 
-test("stroke text keeps physical width, spacing, justification, rotation and mirror", () => {
+test("MSDF text keeps physical cell width, spacing, justification, rotation and mirror", () => {
   const t: BoardText = {
     ...text(),
     text: "MM",
@@ -149,33 +158,50 @@ test("stroke text keeps physical width, spacing, justification, rotation and mir
     spacing: 0.5,
     strokeWidth: 0.1,
   };
-  const base = BoardTextStrokeBuilder.build(t),
-    points = base.flatMap((s) => [s.a, s.b]);
+  const base = BoardTextGlyphBuilder.build(t, fixtureFont),
+    points = base.flatMap(glyphCorners);
   expect(Math.min(...points.map((p) => p[0]))).toBe(0);
   expect(Math.max(...points.map((p) => p[0]))).toBe(4.5);
   expect(Math.max(...points.map((p) => p[1]))).toBe(3);
-  expect(base.every((s) => s.width === 0.1)).toBeTruthy();
-  const mirrored = BoardTextStrokeBuilder.build({ ...t, mirrored: true }),
-    rotated = BoardTextStrokeBuilder.build({ ...t, angle: Math.PI / 2 });
+  expect(
+    base.every((s) => s.values.length === 16 && s.page === 0),
+  ).toBeTruthy();
+  const mirrored = BoardTextGlyphBuilder.build(
+      { ...t, mirrored: true },
+      fixtureFont,
+    ),
+    rotated = BoardTextGlyphBuilder.build(
+      { ...t, angle: Math.PI / 2 },
+      fixtureFont,
+    );
   for (let i = 0; i < base.length; i++) {
-    expect(Math.abs(mirrored[i].a[0] + base[i].a[0]) < 1e-12).toBeTruthy();
-    expect(Math.abs(rotated[i].a[0] + base[i].a[1]) < 1e-12).toBeTruthy();
-    expect(Math.abs(rotated[i].a[1] - base[i].a[0]) < 1e-12).toBeTruthy();
+    expect(
+      Math.abs(mirrored[i].values[0] + base[i].values[0]) < 1e-12,
+    ).toBeTruthy();
+    expect(
+      Math.abs(rotated[i].values[0] + base[i].values[1]) < 1e-12,
+    ).toBeTruthy();
+    expect(
+      Math.abs(rotated[i].values[1] - base[i].values[0]) < 1e-12,
+    ).toBeTruthy();
   }
-  const right = BoardTextStrokeBuilder.build({ ...t, align: "right" });
-  expect(right[0].a[0]).toBe(base[0].a[0] - 4.5);
+  const right = BoardTextGlyphBuilder.build(
+    { ...t, align: "right" },
+    fixtureFont,
+  );
+  expect(right[0].values[0]).toBe(base[0].values[0] - 4.5);
 });
 
-test("multiline stroke text uses the BRD line pitch", () => {
+test("multiline MSDF text uses the BRD line pitch", () => {
   const t = {
     ...text(),
     text: "M\nM",
     at: [0, 0] as [number, number],
     lineSpacing: 4,
   };
-  const strokes = BoardTextStrokeBuilder.build(t),
+  const strokes = BoardTextGlyphBuilder.build(t, fixtureFont),
     n = strokes.length / 2;
-  expect(strokes[n].a[1]).toBe(strokes[0].a[1] - 4);
+  expect(strokes[n].values[1]).toBe(strokes[0].values[1] - 4);
 });
 
 test("existing zero-size text blocks preserve placed objects and layer metadata", async () => {
@@ -225,7 +251,7 @@ test("existing zero-size text blocks preserve placed objects and layer metadata"
   expect(t.classId).toBe(2);
   expect(t.subclass).toBe(253);
   expect(result.drawingLayers[0].id).toBe(t.layer);
-  expect(BoardTextStrokeBuilder.build(t)).toStrictEqual([]);
+  expect(BoardTextGlyphBuilder.build(t, fixtureFont)).toStrictEqual([]);
   // Missing fonts and partially zero dimensions remain diagnosed, not given a
   // default font or mistaken for the verified all-zero definition.
   fonts.pop();
@@ -257,9 +283,9 @@ test("zero-sized glyphs never become GPU hairline dots while normal hairline tex
         lineSpacing: 0,
         strokeWidth: 0,
       };
-      expect(BoardTextStrokeBuilder.build(t)).toStrictEqual([]);
+      expect(BoardTextGlyphBuilder.build(t, fixtureFont)).toStrictEqual([]);
     }
-  const strokes = BoardTextStrokeBuilder.build({ ...text(), strokeWidth: 0 });
+  const strokes = BoardTextGlyphBuilder.build({ ...text(), strokeWidth: 0 });
   expect(strokes.length > 0).toBeTruthy();
-  expect(strokes.every((s) => s.width === 0)).toBeTruthy();
+  expect(strokes.every((s) => s.values.length === 16)).toBeTruthy();
 });

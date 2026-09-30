@@ -24,7 +24,7 @@ test("curve fill layer owns its pipelines and releases cached resources", async 
   layer.dispose();
 });
 
-test("atlas initialization passes cancellation to both font requests", async () => {
+test("atlas initialization passes cancellation to the core atlas request", async () => {
   const controller = new AbortController();
   const fetchFont = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
     expect(init?.signal).toBe(controller.signal);
@@ -47,7 +47,7 @@ test("atlas initialization passes cancellation to both font requests", async () 
     const rejected = expect(pending).rejects.toMatchObject({
       name: "AbortError",
     });
-    await vi.waitFor(() => expect(fetchFont).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(fetchFont).toHaveBeenCalledTimes(1));
     controller.abort();
     await rejected;
   } finally {

@@ -19,7 +19,8 @@ fn vs(@builtin(vertex_index) i: u32, @location(0) xywh: vec4f, @location(1) uv: 
     // Shapes already carry their own alpha; drill spans also survive Global=0.
     // Keep the flag per glyph because spans and via net names share a batch.
     out.uv = mix(vec2f(uv.x, uv.w), vec2f(uv.z, uv.y), corner);
-    out.color = vec4f(color.rgb, color.a * select(view.settings.x, 1.0, rotation.w > 0.5));
+    // Low bit is independent opacity; upper bits identify a CPU-selected atlas page.
+    out.color = vec4f(color.rgb, color.a * select(view.settings.x, 1.0, (u32(rotation.w) & 1u) != 0u));
     return out;
 }
 
@@ -33,5 +34,7 @@ fn fs(i: Out) -> @location(0) vec4f {
     let screenRange = 4.0 / max(max(dx, dy), 0.0001);
     let softness = 0.5 / max(screenRange, 1.0);
     let body = smoothstep(0.5 - softness, 0.5 + softness, distance);
-    return vec4f(i.color.rgb, i.color.a * body);
+    let overlay = select(vec3f(1), vec3f(.63, 1, .85), view.settings.w > 1.5);
+    let color = select(i.color.rgb, overlay, view.settings.w > .5);
+    return vec4f(color, i.color.a * body);
 }

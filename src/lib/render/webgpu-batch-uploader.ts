@@ -172,6 +172,7 @@ export class WebGPUBatchUploader implements IDisposable {
           category: batch.category,
           triangles: batch.triangles,
           arcs: batch.arcs,
+          msdf: batch.msdf,
           padMode: batch.padMode,
           zones: batch.zones,
           outlines: batch.outlines,

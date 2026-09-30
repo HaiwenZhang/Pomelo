@@ -35,9 +35,9 @@ export const padDistance = (point: Point, pad: PadShape, owner: PadPlacement) =>
   new PadShapeGeometry(pad).distance(point, owner);
 
 import {
-  BoardTextStrokeBuilder,
-  type TextStroke,
-} from "../text/board-text-stroke-builder";
+  BoardTextGlyphBuilder,
+  glyphCorners,
+} from "../text/board-text-glyph-builder";
 
 export type BoardObject =
   | { kind: "drawing"; value: BoardDrawing }
@@ -71,7 +71,7 @@ interface Entry {
   backdrill?: boolean;
   backdrillBase?: boolean;
   segment?: Segment;
-  strokes?: TextStroke[];
+  glyphs?: Point[][];
 }
 // Pads on different layers keep distinct hit records, but share one spatial
 // tree entry per source object. Test each original bound after the broad phase.
@@ -272,29 +272,29 @@ export class BoardIndex {
     }
     for (const chunk of drawingChunks.values()) yield* flushDrawing(chunk);
     // Text submission follows scene.texts, which can differ from owner/graphic
-    // chain order. The last visible overlapping stroke must win in both paths.
+    // chain order. The last visible overlapping glyph must win in both paths.
     if (drawingTextOwners.size)
       for (const text of scene.texts) {
         const object = drawingTextOwners.get(text.id);
         if (object) {
-          const strokes: TextStroke[] = [],
+          const glyphs: Point[][] = [],
             bounds = emptyBounds();
-          for (const stroke of BoardTextStrokeBuilder.buildSteps(text)) {
-            if (!stroke) {
+          for (const glyph of BoardTextGlyphBuilder.buildSteps(text)) {
+            if (!glyph) {
               yield;
               continue;
             }
-            strokes.push(stroke);
-            include(bounds, stroke.a, stroke.width / 2);
-            include(bounds, stroke.b, stroke.width / 2);
+            const corners = glyphCorners(glyph);
+            glyphs.push(corners);
+            for (const point of corners) include(bounds, point, 0);
           }
-          if (strokes.length)
+          if (glyphs.length)
             entries.push({
               object,
               layer: text.layer,
               category: "text",
               bounds,
-              strokes,
+              glyphs,
               sequence: entries.length,
             });
         }
@@ -545,12 +545,20 @@ export class BoardIndex {
             new SegmentShape(entry.segment).distance(point) -
             Math.max(entry.segment.width / 2, 0.5 / scale);
         else
-          for (const stroke of entry.strokes ?? [])
-            distance = Math.min(
-              distance,
-              new LineShape(stroke.a, stroke.b).distance(point) -
-                Math.max(stroke.width / 2, 0.5 / scale),
-            );
+          for (const corners of entry.glyphs ?? []) {
+            if (PolygonShape.containsRing(point, corners))
+              distance = -1 / scale;
+            else
+              for (let i = 0; i < corners.length; i++)
+                distance = Math.min(
+                  distance,
+                  new LineShape(
+                    corners[i],
+                    corners[(i + 1) % corners.length],
+                  ).distance(point) -
+                    0.5 / scale,
+                );
+          }
       } else if (object.kind === "zone") {
         const zone = object.value;
         if (display.shapes > 0 && new ZoneShape(zone).contains(point))

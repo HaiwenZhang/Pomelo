@@ -432,6 +432,8 @@ export class WebGPUFrame implements IDisposable {
       }
       if (batch.category === "zone")
         copper(batch, frameRenderer.resources.zoneBind, true);
+      else if (batch.msdf !== undefined)
+        frameRenderer.resources.labels.drawBatch(pass, batch, localView);
       else
         ordinary(
           batch,
@@ -463,6 +465,15 @@ export class WebGPUFrame implements IDisposable {
           continue;
         if (batch.category === "zone")
           copper(batch, frameRenderer.resources.selectionPolygonBind);
+        else if (batch.msdf !== undefined)
+          frameRenderer.resources.labels.drawBatch(
+            pass,
+            batch,
+            localView,
+            hovering
+              ? frameRenderer.resources.hoverUniform
+              : frameRenderer.resources.selectionUniform,
+          );
         else
           ordinary(
             batch,

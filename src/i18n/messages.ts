@@ -127,7 +127,7 @@ const diagnosticPatterns: readonly DiagnosticPattern[] = [
   [/^(\d+) 个非铜层 Region6 图形只显示轮廓$/, "altiumNonCopperRegions"],
   [/^(\d+) 个裁切或其他 Region6 图形尚未显示$/, "altiumOtherRegions"],
   [/^(\d+) 个空文字或零尺寸文字没有笔画$/, "altiumEmptyTexts"],
-  [/^(\d+) 个非笔画字体文字暂以通用笔画字体显示$/, "altiumFonts"],
+  [/^(\d+) 个非笔画字体文字暂以(?:通用笔画字体|思源黑体)显示$/, "altiumFonts"],
   [/^(\d+) 个非铜层焊盘缺少有效轮廓$/, "altiumNonCopperPads"],
   [/^(\d+) 个焊盘使用未支持形状$/, "altiumPadShapes"],
   [/^(\d+) 个焊盘孔形按圆孔显示$/, "altiumPadHoles"],

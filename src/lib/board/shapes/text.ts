@@ -7,7 +7,7 @@ export class TextShape {
       "width" | "height" | "spacing" | "lineSpacing" | "strokeWidth"
     >,
   ) {}
-  /** A stored zero-size text block remains a scene object but has no drawable strokes. */
+  /** A stored zero-size text block remains a scene object but has no drawable glyphs. */
   isZeroSize(): boolean {
     const text = this.data;
     return (

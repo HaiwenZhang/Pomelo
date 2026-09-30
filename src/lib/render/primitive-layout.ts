@@ -4,15 +4,19 @@ import type { Point, Segment } from "../board/model";
 export const STROKE_PACKET = { stride: 12, positions: 4 } as const;
 export const ARC_PACKET = { stride: 20, positions: 12 } as const;
 export const TRIANGLE_PACKET = { stride: 6, positions: 2 } as const;
+export const GLYPH_PACKET = { stride: 16, positions: 2 } as const;
 export function primitiveLayout(batch: {
   triangles?: boolean;
   arcs?: boolean;
+  msdf?: number;
 }) {
-  return batch.triangles
-    ? TRIANGLE_PACKET
-    : batch.arcs
-      ? ARC_PACKET
-      : STROKE_PACKET;
+  return batch.msdf !== undefined
+    ? GLYPH_PACKET
+    : batch.triangles
+      ? TRIANGLE_PACKET
+      : batch.arcs
+        ? ARC_PACKET
+        : STROKE_PACKET;
 }
 
 /** Encode source strokes directly, retaining doubles until packet conversion. */

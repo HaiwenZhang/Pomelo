@@ -1,10 +1,10 @@
 import { expect, test, vi } from "vitest";
 import type { BoardScene } from "../../src/lib/board/model";
 import { prepareBoardText } from "../../src/lib/text/board-text-preparation";
-import { StrokeFont } from "../../src/lib/text/stroke-font";
+import { MsdfFont } from "../../src/lib/text/msdf-font";
 
 test("a prepared scene reuses font scanning and retains one missing-glyph diagnostic", async () => {
-  const prepare = vi.spyOn(StrokeFont, "prepare");
+  const prepare = vi.spyOn(MsdfFont, "prepare");
   const scene = {
     texts: [{ text: "ASCII 😀😀" }],
     diagnostics: [],
@@ -28,7 +28,7 @@ test("a prepared scene reuses font scanning and retains one missing-glyph diagno
 
 test("failed preparation can retry without caching a partially prepared scene", async () => {
   const prepare = vi
-    .spyOn(StrokeFont, "prepare")
+    .spyOn(MsdfFont, "prepare")
     .mockRejectedValueOnce(Error("offline"));
   const scene = {
     texts: [{ text: "ASCII" }],

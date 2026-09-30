@@ -29,10 +29,6 @@ const messages = {
     "Copper contour triangulation exceeds the limit",
   ],
   rendererClosed: ["渲染器已关闭", "Renderer is closed"],
-  invalidStrokeFontGlyph: [
-    "扩展笔画字体字形无效",
-    "Invalid extended stroke font glyph",
-  ],
   padstackTooManyLayers: [
     "Padstack 层数超过 256",
     "Padstack has more than 256 layers",
@@ -1243,10 +1239,6 @@ const dynamicMessages = {
   padsViaNetConflict: [
     "PADS Via 网络证据不一致 {{detail}}",
     "PADS via {{detail}} has inconsistent net evidence",
-  ],
-  strokeFontDownloadFailed: [
-    "无法读取扩展笔画字体 {{detail}}：HTTP {{value}}",
-    "Could not load extended stroke font {{detail}}: HTTP {{value}}",
   ],
   altiumUndefinedViaSpan: [
     "Altium Via {{detail}} 层跨度未定义 {{value}}",

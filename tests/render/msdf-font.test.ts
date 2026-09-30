@@ -40,16 +40,17 @@ test("MSDF font metadata keeps the reference glyph advance, plane and bottom-ori
   expect(font.glyphs[" "].plane).toStrictEqual([0, 0, 0, 0]);
 });
 
-test("shipped MSDF atlas contains the reference digits and Latin glyph metrics", () => {
+test("shipped MSDF atlas contains the Source Han Sans digits and Latin glyph metrics", () => {
   const path = new URL(
-    "../../public/fonts/NotoSansSC-SemiBold.json",
+    "../../public/fonts/source-han-sans/core.json",
     import.meta.url,
   );
   expect(existsSync(path)).toBe(true);
   const font = FontMetrics.fromMsdf(JSON.parse(readFileSync(path, "utf8")));
   expect(font.glyphs["0"].advance).toBe(0.58);
   expect(font.glyphs["1"].advance).toBe(0.58);
-  expect(font.glyphs["A"].advance).toBe(0.632);
-  expect(font.glyphs["g"].plane[1]).toBeCloseTo(-0.3022857142857142, 12);
+  expect(font.glyphs["A"].advance).toBeCloseTo(0.632, 12);
+  expect(font.glyphs["g"].plane[1]).toBeCloseTo(-0.2976190476190476, 12);
+  expect(font.capHeight).toBe(0.733);
   expect(font.glyphs["?"]).toBeDefined();
 });

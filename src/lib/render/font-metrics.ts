@@ -2,14 +2,18 @@ export interface Glyph {
   uv: number[];
   plane: number[];
   advance: number;
+  /** Core atlas is page 0; Unicode block atlases use block + 1. */
+  page?: number;
 }
 export interface FontAtlas {
   size: number;
   range: number;
   glyphs: Record<string, Glyph>;
+  capHeight?: number;
 }
 
-interface MsdfMetadata {
+export interface MsdfMetadata {
+  metrics?: { capHeight?: number };
   atlas: {
     size: number;
     distanceRange: number;
@@ -44,7 +48,7 @@ export class FontMetrics {
     Map<string, number>
   >();
 
-  static fromMsdf(data: MsdfMetadata): FontAtlas {
+  static fromMsdf(data: MsdfMetadata, page?: number): FontAtlas {
     if (data.atlas.yOrigin !== "bottom")
       throw Error("Unsupported MSDF atlas origin");
     const { width, height } = data.atlas;
@@ -53,6 +57,7 @@ export class FontMetrics {
       const p = glyph.planeBounds;
       const a = glyph.atlasBounds;
       glyphs[String.fromCodePoint(glyph.unicode)] = {
+        ...(page === undefined ? {} : { page }),
         // The label shader starts its quad at the lower-left corner. Its UV
         // swizzle expects [left, top, right, bottom] in texture coordinates.
         uv: a
@@ -67,7 +72,16 @@ export class FontMetrics {
         advance: glyph.advance,
       };
     }
-    return { size: data.atlas.size, range: data.atlas.distanceRange, glyphs };
+    return {
+      size: data.atlas.size,
+      range: data.atlas.distanceRange,
+      glyphs,
+      ...(data.metrics?.capHeight ? { capHeight: data.metrics.capHeight } : {}),
+    };
+  }
+
+  static invalidate(font: FontAtlas) {
+    FontMetrics.advances.delete(font);
   }
 
   /** Cached glyph width in font units; a completed board can release its atlas. */

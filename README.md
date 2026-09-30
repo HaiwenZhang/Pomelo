@@ -126,6 +126,10 @@ With npm, replace `bun run` with `npm run` in the commands above. Use `bun run t
 
 The production output is a static site. Serve `dist/` from the site root over HTTPS, or use localhost for local viewing; WebGPU requires a secure context. No board-processing backend is needed.
 
+Text uses glyphs from Adobe's **[Source Han Sans SC](https://github.com/adobe-fonts/source-han-sans)**, licensed under [SIL OFL 1.1](public/fonts/source-han-sans/LICENSE.txt). **Pomelo Sans** is the project-selected internal family name for the generated font subsets; the glyph designs remain attributed to Adobe's Source Han Sans. The original license declares **Source** a Reserved Font Name. Our WOFF2 subsets remove glyphs and are prepared in advance, so they are modified versions subject to OFL clause 3's reserved-name restriction. The generated fonts therefore use a different family name while retaining Adobe's copyright notice and the original OFL license. See the [official OFL explanation of webfonts and reserved names](https://openfontlicense.org/webfonts-and-reserved-font-names/).
+
+Board text and automatic labels share MSDF rendering. The English, digit, and common engineering-symbol atlas loads initially; other glyphs load in 256-codepoint Unicode blocks only when used by board text or net names. Web UI fonts use variable WOFF2 subsets with CSS `unicode-range`. The full OTF is not served to browsers.
+
 | Location                           | Purpose                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------ |
 | [`src/app`](src/app)               | Workspace composition and renderer lifecycle                             |

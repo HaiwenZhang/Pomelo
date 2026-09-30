@@ -320,7 +320,7 @@
     "fontMetrics": "フォント情報を読み込めませんでした",
     "fontAtlas": "グリフアトラスを読み込めませんでした",
     "geometryBufferLimit": "形状バッファーがデバイスの上限を超えています: {{size}} / {{limit}}",
-    "invalidStrokeFont": "拡張ストロークフォントのデータが無効です",
+    "invalidMsdfFont": "MSDF フォントのデータが無効です",
     "openFailed": "基板を開けませんでした: {{details}}"
   },
   "parserErrors": {

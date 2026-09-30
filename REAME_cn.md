@@ -126,6 +126,10 @@ bun run test        # 运行 Vitest 测试套件
 
 构建产物是静态网站，可将 `dist/` 部署在站点根路径并通过 HTTPS 访问，本地查看可使用 localhost；WebGPU 需要安全上下文。无需提供处理板文件的后端服务。
 
+文字的字形来自 Adobe 的 **[Source Han Sans SC（思源黑体简体中文）](https://github.com/adobe-fonts/source-han-sans)**，遵循 [SIL OFL 1.1](public/fonts/source-han-sans/LICENSE.txt) 许可。**Pomelo Sans** 是本项目为生成的字体子集选定的内部字体家族名称，字形设计仍归属于 Adobe 的思源黑体。原许可将 **Source** 声明为保留字体名称（Reserved Font Name）。本项目裁剪字符集并预先生成 WOFF2 子集，这些子集属于修改版本，受 OFL 第 3 条的保留名称限制，因此生成字体采用不同的家族名称，并保留 Adobe 的版权声明与原 OFL 许可。详见 [OFL 官方对 Web 字体与保留名称的说明](https://openfontlicense.org/webfonts-and-reserved-font-names/)。
+
+板上文字和自动标签共用 MSDF 渲染。首次加载英文、数字和常用工程符号的图集；其他字形按每块 256 个码点的 Unicode 区块，仅在板上文字或网络名称使用时按需加载。Web 界面字体使用可变 WOFF2 子集，通过 CSS `unicode-range` 声明覆盖范围。浏览器不会加载完整的 OTF 字体。
+
 | 目录                               | 职责                               |
 | ---------------------------------- | ---------------------------------- |
 | [`src/app`](src/app)               | 工作台组合与渲染器生命周期         |

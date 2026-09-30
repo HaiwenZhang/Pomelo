@@ -126,6 +126,10 @@ bun run test        # 執行 Vitest 測試套件
 
 建置產物是靜態網站，可將 `dist/` 部署在網站根目錄並透過 HTTPS 瀏覽，本機查看可使用 localhost；WebGPU 需要安全的執行環境。無需提供處理電路板檔案的後端服務。
 
+文字的字形來自 Adobe 的 **[Source Han Sans SC（思源黑體簡體中文）](https://github.com/adobe-fonts/source-han-sans)**，遵循 [SIL OFL 1.1](public/fonts/source-han-sans/LICENSE.txt) 授權。**Pomelo Sans** 是本專案為產生的字型子集選定的內部字型家族名稱，字形設計仍歸屬於 Adobe 的思源黑體。原授權將 **Source** 宣告為保留字型名稱（Reserved Font Name）。本專案裁剪字元集並預先產生 WOFF2 子集，這些子集屬於修改版本，受 OFL 第 3 條的保留名稱限制，因此產生的字型採用不同的家族名稱，並保留 Adobe 的版權聲明與原 OFL 授權。詳見 [OFL 官方對 Web 字型與保留名稱的說明](https://openfontlicense.org/webfonts-and-reserved-font-names/)。
+
+板上文字和自動標籤共用 MSDF 渲染。首次載入英文、數字和常用工程符號的圖集；其他字形按每區塊 256 個碼點的 Unicode 區塊，僅在板上文字或網路名稱使用時按需載入。Web 介面字型使用可變 WOFF2 子集，透過 CSS `unicode-range` 宣告涵蓋範圍。瀏覽器不會載入完整的 OTF 字型。
+
 | 目錄                               | 職責                               |
 | ---------------------------------- | ---------------------------------- |
 | [`src/app`](src/app)               | 工作區組合與渲染器生命週期         |

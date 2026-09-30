@@ -13,6 +13,8 @@ export interface PrimitiveBatch {
   holeChunks?: CopperChunk[];
   triangles?: boolean;
   arcs?: boolean;
+  /** MSDF glyph packet and the atlas page it samples (including core page 0). */
+  msdf?: number;
   padMode?: "filled" | "outline";
   zones?: {
     id: number;

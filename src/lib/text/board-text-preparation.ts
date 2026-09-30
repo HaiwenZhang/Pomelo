@@ -1,5 +1,5 @@
 import type { BoardScene } from "../board/model";
-import { StrokeFont } from "./stroke-font";
+import { MsdfFont } from "./msdf-font";
 
 const prepared = new WeakSet<BoardScene>();
 
@@ -11,7 +11,15 @@ export async function prepareBoardText(
 ) {
   signal?.throwIfAborted();
   if (prepared.has(scene)) return;
-  const missing = await StrokeFont.prepare(scene.texts, signal);
+  const missing = await MsdfFont.prepare(scene.texts, signal);
+  // Net names are also rendered by the shared MSDF atlas.
+  if (scene.nets?.size)
+    await MsdfFont.prepare(
+      (function* () {
+        for (const text of scene.nets?.values() ?? []) yield { text };
+      })(),
+      signal,
+    );
   signal?.throwIfAborted();
   if (missing.size) {
     const message = `原始文字缺少 ${missing.size} 种字形，暂用 ? 显示：${[...missing].slice(0, 16).join(" ")}`;

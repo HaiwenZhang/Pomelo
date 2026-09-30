@@ -73,8 +73,8 @@ test("known GPU errors translate, while unknown non-parser details remain visibl
   expect(localizeError("几何缓冲区超出设备上限：1024 / 512", translator)).toBe(
     "Geometry buffer exceeds the device limit: 1024 / 512",
   );
-  expect(localizeError("扩展笔画字体数据无效", translator)).toBe(
-    "Invalid extended stroke font data",
+  expect(localizeError("MSDF 字体数据无效", translator)).toBe(
+    "Invalid MSDF font data",
   );
 });
 

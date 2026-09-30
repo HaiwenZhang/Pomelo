@@ -35,7 +35,23 @@ export class BatchRangeIndex {
       const value = (k: number) =>
         data[at + k] + (k < lowStride ? low[residual + k] : 0);
       let x0: number, y0: number, x1: number, y1: number;
-      if (batch.triangles) {
+      if (batch.msdf !== undefined) {
+        const x = value(0),
+          y = value(1),
+          w = value(2),
+          h = value(3);
+        const cos = value(12),
+          sin = value(13),
+          sign = value(14);
+        const dx = w * cos * sign,
+          dy = w * sin;
+        const ex = -h * sin * sign,
+          ey = h * cos;
+        x0 = Math.min(x, x + dx, x + ex, x + dx + ex);
+        x1 = Math.max(x, x + dx, x + ex, x + dx + ex);
+        y0 = Math.min(y, y + dy, y + ey, y + dy + ey);
+        y1 = Math.max(y, y + dy, y + ey, y + dy + ey);
+      } else if (batch.triangles) {
         x0 = x1 = value(0);
         y0 = y1 = value(1);
       } else if (batch.arcs) {

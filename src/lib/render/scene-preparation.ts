@@ -16,6 +16,10 @@ export class ScenePreparation {
   constructor(
     private readonly device: GPUDevice,
     private readonly font: FontAtlas,
+    private readonly prepareFont?: (
+      scene: BoardScene,
+      signal: AbortSignal,
+    ) => Promise<void>,
   ) {}
 
   create(source: BoardScene) {
@@ -54,6 +58,7 @@ export class ScenePreparation {
     signal.throwIfAborted();
     progress?.({ phase: "读取原始文字字形", fraction: 0 });
     await prepareBoardText(source, signal);
+    await this.prepareFont?.(source, signal);
     progress?.({ phase: "构建拾取索引", fraction: 0.15 });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const index = await BoardIndex.create(source, signal);

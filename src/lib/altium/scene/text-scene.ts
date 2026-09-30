@@ -43,8 +43,8 @@ export class AltiumTextBuilder {
       const copper = resolver.copper(source.layer),
         layer = copper ?? resolver.drawing(source.layer);
 
-      // BoardScene uses one built-in stroke alphabet. Preserve source placement
-      // and Unicode content; non-stroke font faces are intentionally approximate.
+      // BoardScene uses Source Han Sans. Preserve source placement and Unicode
+      // content; the source application's font face is intentionally approximate.
       if (source.fontType !== 0) nonStrokeFonts++;
       texts.push({
         id: 0x71000000 + source.index,

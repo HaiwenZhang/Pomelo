@@ -328,7 +328,7 @@ const baseTranslations = {
         fontMetrics: "字体度量加载失败",
         fontAtlas: "字形图集加载失败",
         geometryBufferLimit: "几何缓冲区超出设备上限：{{size}} / {{limit}}",
-        invalidStrokeFont: "扩展笔画字体数据无效",
+        invalidMsdfFont: "MSDF 字体数据无效",
         openFailed: "打开板图失败：{{details}}",
       },
       parserErrors: {
@@ -875,7 +875,7 @@ const baseTranslations = {
         fontAtlas: "Could not load the glyph atlas",
         geometryBufferLimit:
           "Geometry buffer exceeds the device limit: {{size}} / {{limit}}",
-        invalidStrokeFont: "Invalid extended stroke font data",
+        invalidMsdfFont: "Invalid MSDF font data",
         openFailed: "Could not open this board: {{details}}",
       },
       parserErrors: {
@@ -1151,7 +1151,7 @@ const baseTranslations = {
         altiumEmptyTexts:
           "{{count}} empty or zero-size text objects have no strokes",
         altiumFonts:
-          "{{count}} text objects with non-stroke fonts use the generic stroke font",
+          "{{count}} text objects with non-stroke fonts use Source Han Sans",
         altiumNonCopperPads:
           "{{count}} pads on non-copper layers have no valid outline",
         altiumPadShapes: "{{count}} pads use unsupported shapes",

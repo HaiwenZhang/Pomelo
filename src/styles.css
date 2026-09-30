@@ -1,8 +1,8 @@
 @import "tailwindcss";
+@import "./styles-fonts.css";
 
 @theme {
-  --font-sans:
-    "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-sans: "Pomelo Sans", sans-serif;
 }
 :root {
   font-family: var(--font-sans);

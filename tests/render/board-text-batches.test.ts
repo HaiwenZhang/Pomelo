@@ -5,7 +5,7 @@ import { AllegroTextRecordDecoder } from "../../src/lib/allegro/decoders/text-re
 import { BoardDisplay } from "../../src/lib/board/display";
 import type { BoardScene } from "../../src/lib/board/model";
 
-import { BoardTextStrokeBuilder } from "../../src/lib/text/board-text-stroke-builder";
+import { BoardTextGlyphBuilder } from "../../src/lib/text/board-text-glyph-builder";
 import { buildBoardTextBatches } from "../../src/lib/render/board-text-batch-builder";
 import { splitPositions } from "../../src/lib/render/position-precision";
 
@@ -71,7 +71,7 @@ test("original board text is hidden by default and can be enabled", () => {
   ).toBeGreaterThan(0);
 });
 
-test("bounded text batches preserve every legacy vertex, residual, color and layer order", () => {
+test("bounded text batches preserve every MSDF quad, residual, color and layer order", () => {
   const reference = new Map<number, number[]>();
   for (const text of scene.texts) {
     const layer = [...scene.layers, ...scene.drawingLayers].find(
@@ -85,19 +85,13 @@ test("bounded text batches preserve every legacy vertex, residual, color and lay
     const color = [1, 3, 5].map(
       (i) => parseInt(layer.color.slice(i, i + 2), 16) / 255,
     );
-    for (const s of BoardTextStrokeBuilder.build(text))
-      values.push(
-        s.a[0] - 200001,
-        s.a[1] + 399999,
-        s.b[0] - 200001,
-        s.b[1] + 399999,
-        s.width,
-        0,
-        0,
-        0,
-        ...color,
-        1,
-      );
+    for (const glyph of BoardTextGlyphBuilder.build(text)) {
+      const v = [...glyph.values];
+      v[0] -= 200001;
+      v[1] += 399999;
+      v.splice(8, 3, ...color);
+      values.push(...v);
+    }
   }
   const batches = [...buildBoardTextBatches(scene, undefined, 13)].filter(
     (b) => !!b,
@@ -107,7 +101,7 @@ test("bounded text batches preserve every legacy vertex, residual, color and lay
     ...reference.keys(),
   ]);
   for (const [layer, values] of reference) {
-    const expected = splitPositions(values, 12, 4),
+    const expected = splitPositions(values, 16, 2),
       actual = batches.filter((b) => b.layer === layer);
     expect(new Float32Array(actual.flatMap((b) => [...b.data]))).toStrictEqual(
       expected.data,
@@ -118,7 +112,7 @@ test("bounded text batches preserve every legacy vertex, residual, color and lay
   }
   expect(
     batches.every(
-      (b) => b.data.byteLength <= 13 * 48 && b.residual.byteLength <= 13 * 16,
+      (b) => b.data.byteLength <= 13 * 64 && b.residual.byteLength <= 13 * 8,
     ),
   ).toBeTruthy();
 });

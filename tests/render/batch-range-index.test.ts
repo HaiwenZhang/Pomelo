@@ -25,6 +25,19 @@ function ranges(
   return result;
 }
 const view = { minX: -2, minY: -2, maxX: 2, maxY: 2 };
+test("rotated and mirrored MSDF glyphs intersecting the view survive with their origins outside", () => {
+  const values: number[] = [];
+  for (let i = 0; i < 32; i++)
+    values.push(i < 16 ? 4 : 100, 4, -5, 4, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0);
+  const tree = index({
+    layer: 0,
+    category: "text",
+    msdf: 0,
+    ...splitPositions(values, 16, 2),
+  });
+  expect(ranges(tree, view)).toEqual([[0, 16]]);
+  expect(ranges(tree, view, 4, 24)).toEqual([[4, 12]]);
+});
 test("range culling preserves translucent submission order, merges fit ranges and clips borrowed selections", () => {
   const values = [];
   for (let i = 0; i < 96; i++)

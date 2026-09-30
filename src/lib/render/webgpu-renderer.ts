@@ -93,6 +93,7 @@ export class WebGPURenderer extends Renderer {
     this.preparation = new ScenePreparation(
       resources.device,
       resources.labels.font,
+      (scene, signal) => resources.labels.prepare(scene, signal),
     );
     this.viewport = new BoardViewport(
       resources.canvas,
@@ -254,9 +255,17 @@ export class WebGPURenderer extends Renderer {
   }
 
   setScene(value: BoardScene | null) {
+    if (value) {
+      void this.prepareScene(value, new AbortController().signal).catch(
+        (error) => {
+          if (error instanceof Error && error.name !== "AbortError")
+            this.resources.onError(error.message);
+        },
+      );
+      return;
+    }
     this.sceneTasks.cancel();
     this.clearScene();
-    if (value) this.attachScene(this.preparation.create(value));
   }
 
   async prepareScene(

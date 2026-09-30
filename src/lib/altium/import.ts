@@ -162,7 +162,7 @@ export async function importAltium(
     diagnostics.push(`${textModel.emptyTexts} 个空文字或零尺寸文字没有笔画`);
   if (textModel.nonStrokeFonts)
     diagnostics.push(
-      `${textModel.nonStrokeFonts} 个非笔画字体文字暂以通用笔画字体显示`,
+      `${textModel.nonStrokeFonts} 个非笔画字体文字暂以思源黑体显示`,
     );
   if (pads.nonCopperPads > pads.drawings.length)
     diagnostics.push(
