@@ -5,7 +5,7 @@
 <h1 align="center">Pomelo · PCB Viewer</h1>
 
 <p align="center">
-  <strong><a href="https://haiwenzhang.github.io/pomelo/">Open Pomelo online</a></strong>
+  <strong><a href="https://haiwenzhang.github.io/Pomelo/">Open Pomelo online</a></strong>
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#supported-formats">Supported formats</a> ·
-  <a href="https://github.com/HaiwenZhang/pomelo/issues">Report an issue</a> ·
+  <a href="https://github.com/HaiwenZhang/Pomelo/issues">Report an issue</a> ·
   <a href="#contributing">Contribute</a>
 </p>
 
@@ -77,8 +77,8 @@ The `.brd` importer targets **Cadence Allegro binary files**, not every EDA form
 ### Run locally
 
 ```sh
-git clone https://github.com/HaiwenZhang/pomelo.git
-cd pomelo
+git clone https://github.com/HaiwenZhang/Pomelo.git
+cd Pomelo
 bun install --frozen-lockfile
 bun run dev
 ```
@@ -144,6 +144,6 @@ Board text and automatic labels share MSDF rendering. The English, digit, and co
 
 Help make more boards easier to explore. Contributions are welcome in format compatibility, rendering accuracy, large-board performance, translations, and documentation.
 
-- **Found an import or display issue?** [Open an issue](https://github.com/HaiwenZhang/pomelo/issues) with the source tool and file version, browser / OS / GPU details, reproduction steps, and import diagnostics. A small, shareable sample or comparison screenshot is especially useful; remove confidential design data first.
+- **Found an import or display issue?** [Open an issue](https://github.com/HaiwenZhang/Pomelo/issues) with the source tool and file version, browser / OS / GPU details, reproduction steps, and import diagnostics. A small, shareable sample or comparison screenshot is especially useful; remove confidential design data first.
 - **Working on a fix?** Include a focused regression test for parser or geometry changes and screenshots for visual changes. Keep all four language versions of the README in sync when changing documented behavior.
 - **Finding Pomelo useful?** Star the repository and share it with someone who spends time exploring PCBs. Real-world feedback helps prioritize the next compatibility improvements.

@@ -5,7 +5,7 @@
 <h1 align="center">Pomelo · PCB Viewer</h1>
 
 <p align="center">
-  <strong><a href="https://haiwenzhang.github.io/pomelo/">線上使用 Pomelo</a></strong>
+  <strong><a href="https://haiwenzhang.github.io/Pomelo/">線上使用 Pomelo</a></strong>
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@
 <p align="center">
   <a href="#快速開始">快速開始</a> ·
   <a href="#支援的格式">支援的格式</a> ·
-  <a href="https://github.com/HaiwenZhang/pomelo/issues">問題回報</a> ·
+  <a href="https://github.com/HaiwenZhang/Pomelo/issues">問題回報</a> ·
   <a href="#參與貢獻">參與貢獻</a>
 </p>
 
@@ -77,8 +77,8 @@
 ### 本機執行
 
 ```sh
-git clone https://github.com/HaiwenZhang/pomelo.git
-cd pomelo
+git clone https://github.com/HaiwenZhang/Pomelo.git
+cd Pomelo
 bun install --frozen-lockfile
 bun run dev
 ```
@@ -144,6 +144,6 @@ bun run test        # 執行 Vitest 測試套件
 
 一起讓更多電路板變得容易探索。歡迎參與格式相容、渲染精度、大板性能、翻譯與文件改進。
 
-- **遇到匯入或顯示問題？** 請[提交 Issue](https://github.com/HaiwenZhang/pomelo/issues)，附上來源軟體及檔案版本、瀏覽器 / 作業系統 / GPU 資訊、重現步驟與匯入診斷。可公開的小型範例或原始軟體對照截圖尤其有幫助，分享前請移除機密設計資料。
+- **遇到匯入或顯示問題？** 請[提交 Issue](https://github.com/HaiwenZhang/Pomelo/issues)，附上來源軟體及檔案版本、瀏覽器 / 作業系統 / GPU 資訊、重現步驟與匯入診斷。可公開的小型範例或原始軟體對照截圖尤其有幫助，分享前請移除機密設計資料。
 - **準備提交改進？** 解析器或幾何變更請附上針對性的回歸測試，視覺變更請提供截圖；涉及已記錄行為的調整，請同步更新四種語言的 README。
 - **覺得 Pomelo 有幫助？** 歡迎按下 Star，也可以分享給經常需要查看 PCB 的朋友。實際使用回饋能幫助專案確定下一步相容性改進的優先順序。

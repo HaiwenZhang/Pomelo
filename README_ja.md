@@ -5,7 +5,7 @@
 <h1 align="center">Pomelo · PCB Viewer</h1>
 
 <p align="center">
-  <strong><a href="https://haiwenzhang.github.io/pomelo/">Pomelo をオンラインで使う</a></strong>
+  <strong><a href="https://haiwenzhang.github.io/Pomelo/">Pomelo をオンラインで使う</a></strong>
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@
 <p align="center">
   <a href="#クイックスタート">クイックスタート</a> ·
   <a href="#対応形式">対応形式</a> ·
-  <a href="https://github.com/HaiwenZhang/pomelo/issues">問題を報告</a> ·
+  <a href="https://github.com/HaiwenZhang/Pomelo/issues">問題を報告</a> ·
   <a href="#貢献">貢献</a>
 </p>
 
@@ -77,8 +77,8 @@
 ### ローカルで実行
 
 ```sh
-git clone https://github.com/HaiwenZhang/pomelo.git
-cd pomelo
+git clone https://github.com/HaiwenZhang/Pomelo.git
+cd Pomelo
 bun install --frozen-lockfile
 bun run dev
 ```
@@ -144,6 +144,6 @@ npm を使う場合は、上記の `bun run` を `npm run` に置き換えてく
 
 さまざまな基板をより調べやすくするために、形式の互換性、表示精度、大規模基板の性能、翻訳、文書の改善への貢献を歓迎します。
 
-- **読み込みや表示に問題がありましたか？** 元のソフトウェアとファイルのバージョン、ブラウザー / OS / GPU、再現手順、読み込み時の診断を添えて [Issue を作成](https://github.com/HaiwenZhang/pomelo/issues)してください。共有可能な小さなサンプルや比較用のスクリーンショットも役立ちます。共有前に機密の設計情報を削除してください。
+- **読み込みや表示に問題がありましたか？** 元のソフトウェアとファイルのバージョン、ブラウザー / OS / GPU、再現手順、読み込み時の診断を添えて [Issue を作成](https://github.com/HaiwenZhang/Pomelo/issues)してください。共有可能な小さなサンプルや比較用のスクリーンショットも役立ちます。共有前に機密の設計情報を削除してください。
 - **修正を提案しますか？** パーサーや形状処理の変更には対象を絞った回帰テストを、表示の変更にはスクリーンショットを添えてください。文書化済みの動作を変更した場合は、4 言語すべての README を更新してください。
 - **Pomelo が役立ちましたか？** リポジトリに Star を付けたり、PCB を調べる人に紹介したりしてください。実際の使用感は、今後の対応範囲を決める助けになります。
