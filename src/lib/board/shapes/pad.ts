@@ -34,8 +34,7 @@ export class PadShape {
         ? [circle(w), circle(pad.innerDiameter! / 2)]
         : [circle(w)];
     }
-    const r =
-      pad.type === 11 ? Math.min(w, h) : Math.min(w, h, pad.corner ?? 0);
+    const r = this.corner();
     const points: Point[] = [
       [w, h - r],
       [w - r, h],
@@ -62,7 +61,9 @@ export class PadShape {
           a,
           b,
           0,
-          i % 2 === 0 && r > 0 && pad.type !== 28 ? centers[i / 2] : undefined,
+          i % 2 === 0 && r > 0 && !this.chamfered()
+            ? centers[i / 2]
+            : undefined,
         ),
       );
     }
@@ -97,6 +98,9 @@ export class PadShape {
             ? min * (1 - 1 / Math.sqrt(2))
             : 0,
     );
+  }
+  chamfered(): boolean {
+    return this.data.type === 3 || this.data.type === 28;
   }
   toWorld(point: Point, owner: PadPlacement): Point {
     const pad = this.data;
@@ -134,7 +138,7 @@ export class PadShape {
     const corner = this.corner(),
       x = Math.abs(p[0]) - pad.width / 2,
       y = Math.abs(p[1]) - pad.height / 2;
-    if ([3, 28].includes(pad.type))
+    if (this.chamfered())
       return Math.max(x, y, (x + y + corner) * Math.SQRT1_2);
     return (
       Math.hypot(Math.max(x + corner, 0), Math.max(y + corner, 0)) +
@@ -196,36 +200,40 @@ export class PadShape {
     return mesh;
   }
   edges(owner: PadPlacement): Segment[] {
+    return [...this.iterateEdges(owner)];
+  }
+  *iterateEdges(owner: PadPlacement): Generator<Segment> {
     const pad = this.data;
-    const paths =
-      pad.customPaths ??
-      pad.custom!.map((ring) =>
-        ring.map((a, i): Segment => ({
-          id: 0,
-          trackId: 0,
-          layer: pad.layer,
-          net: 0,
-          a,
-          b: ring[(i + 1) % ring.length],
-          width: 0,
-        })),
-      );
-    return paths.flatMap((path) =>
-      path.map((edge) => {
-        const a = this.toWorld(edge.a, owner),
-          b = this.toWorld(edge.b, owner);
-        let arc: Segment["arc"];
-        if (edge.arc) {
-          const center = this.toWorld(edge.arc.center, owner);
-          arc = {
-            center,
-            radius: edge.arc.radius,
-            start: Math.atan2(a[1] - center[1], a[0] - center[0]),
-            sweep: edge.arc.sweep * (owner.back ? -1 : 1),
-          };
-        }
-        return { ...edge, a, b, arc, layer: pad.layer, width: 0 };
-      }),
-    );
+    function* localEdges() {
+      if (pad.customPaths) {
+        for (const path of pad.customPaths) yield* path;
+      } else
+        for (const ring of pad.custom!)
+          for (let i = 0; i < ring.length; i++)
+            yield {
+              id: 0,
+              trackId: 0,
+              layer: pad.layer,
+              net: 0,
+              a: ring[i],
+              b: ring[(i + 1) % ring.length],
+              width: 0,
+            } as Segment;
+    }
+    for (const edge of localEdges()) {
+      const a = this.toWorld(edge.a, owner),
+        b = this.toWorld(edge.b, owner);
+      let arc: Segment["arc"];
+      if (edge.arc) {
+        const center = this.toWorld(edge.arc.center, owner);
+        arc = {
+          center,
+          radius: edge.arc.radius,
+          start: Math.atan2(a[1] - center[1], a[0] - center[0]),
+          sweep: edge.arc.sweep * (owner.back ? -1 : 1),
+        };
+      }
+      yield { ...edge, a, b, arc, layer: pad.layer, width: 0 };
+    }
   }
 }

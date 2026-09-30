@@ -3,8 +3,9 @@ import type { BoardScene } from "../board/model";
 
 import { type DisplayOptions } from "../board/display";
 import { BoardTextStrokeBuilder } from "../text/board-text-stroke-builder";
-import { splitPositions } from "./position-precision";
+import { splitPositionSteps } from "./position-precision";
 import type { PrimitiveBatch } from "./primitive-batch";
+import { appendStroke, STROKE_PACKET } from "./primitive-layout";
 
 /** Bound both the temporary number array and each GPU vertex buffer. Texts on
  * one layer retain source/stroke order, including overlaps across chunk edges. */
@@ -42,24 +43,21 @@ export function* buildBoardTextBatches(
     );
     let values: number[] = [];
     for (const text of texts)
-      for (const stroke of BoardTextStrokeBuilder.build(text)) {
-        values.push(
-          stroke.a[0] - originX,
-          stroke.a[1] - originY,
-          stroke.b[0] - originX,
-          stroke.b[1] - originY,
-          stroke.width,
-          0,
-          0,
-          0,
-          ...color,
-          1,
-        );
-        if (values.length === linesPerBatch * 12) {
+      for (const stroke of BoardTextStrokeBuilder.buildSteps(text)) {
+        if (!stroke) {
+          yield;
+          continue;
+        }
+        appendStroke(values, stroke, originX, originY, color);
+        if (values.length === linesPerBatch * STROKE_PACKET.stride) {
           yield {
             layer,
             category: "text",
-            ...splitPositions(values, 12, 4),
+            ...(yield* splitPositionSteps(
+              values,
+              STROKE_PACKET.stride,
+              STROKE_PACKET.positions,
+            )),
           };
           values = [];
         }
@@ -69,7 +67,11 @@ export function* buildBoardTextBatches(
       yield {
         layer,
         category: "text",
-        ...splitPositions(values, 12, 4),
+        ...(yield* splitPositionSteps(
+          values,
+          STROKE_PACKET.stride,
+          STROKE_PACKET.positions,
+        )),
       };
   }
 }

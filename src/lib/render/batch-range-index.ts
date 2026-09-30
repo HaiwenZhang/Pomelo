@@ -1,5 +1,6 @@
 import type { Bounds } from "../board/model";
 import type { PrimitiveBatch } from "./primitive-batch";
+import { primitiveLayout } from "./primitive-layout";
 
 /** A hierarchy over contiguous draw ranges. Never reorders translucent primitives.
  * Bounds use board-relative doubles (including residuals), like the GPU camera. */
@@ -15,8 +16,7 @@ export class BatchRangeIndex {
     batch: PrimitiveBatch,
   ): Generator<void, BatchRangeIndex | undefined> {
     if (batch.indices || batch.category === "zone") return;
-    const stride = batch.triangles ? 6 : batch.arcs ? 20 : 12;
-    const lowStride = batch.triangles ? 2 : batch.arcs ? 12 : 4;
+    const { stride, positions: lowStride } = primitiveLayout(batch);
     const unit = batch.triangles ? 3 : 1;
     const count = batch.data.length / stride;
     const chunk = 8 * unit;

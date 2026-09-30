@@ -5,6 +5,9 @@ import { BrdTextDecoder } from "../../src/lib/allegro/binary/text-decoder";
 import { BrdDatabase } from "../../src/lib/allegro/database";
 import type { BoardScene } from "../../src/lib/board/model";
 import { createViewerStore } from "../../src/lib/viewer-store";
+import { parserError } from "../../src/lib/parser-error";
+import { createViewerI18n } from "../../src/i18n";
+import { localizeError } from "../../src/i18n/messages";
 
 import {
   importAllegro,
@@ -58,6 +61,22 @@ const dependencies = {
     new BrdDatabase(buffer, header, new Map()),
   buildScene: async () => scene,
 };
+
+test("loader failures retain structured details until the UI displays them", async () => {
+  const failure = parserError(
+    "hfssMissingNet",
+    { detail: 42 },
+    createViewerI18n("en"),
+  );
+  const store = createViewerStore(async () => {
+    throw failure;
+  });
+  await store.getState().open(source("sample.def"));
+  expect(store.getState().error).toBe(failure);
+  expect(
+    localizeError(store.getState().error, createViewerI18n("zh-CN")),
+  ).toContain("HFSS 缺失网络 42");
+});
 
 test("explicit encoding reaches the parser, reports bad offsets and clears diagnostics on reread", async () => {
   const store = createTestStore({

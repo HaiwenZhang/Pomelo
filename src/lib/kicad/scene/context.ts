@@ -1,4 +1,5 @@
 import type { Layer } from "../../board/model";
+import { ParserError } from "../../parser-error";
 import { cooperative } from "../../cooperative";
 import type { KiCadBoardIndex } from "../syntax/index";
 import {
@@ -42,7 +43,11 @@ export class KiCadSceneContext {
     if (/^\d+$/.test(value)) {
       const id = Number(value);
       if (!Number.isSafeInteger(id) || (id !== 0 && !this.nets.has(id)))
-        throw new Error(`KiCad ${node.head} 引用未知网络 ${value}`);
+        throw new ParserError(
+          "kicadUnknownObjectNet",
+          { detail: node.head, value },
+          `KiCad ${node.head} 引用未知网络 ${value}`,
+        );
       return id;
     }
     if (!value) return 0;

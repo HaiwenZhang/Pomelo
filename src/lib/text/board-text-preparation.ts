@@ -1,0 +1,21 @@
+import type { BoardScene } from "../board/model";
+import { StrokeFont } from "./stroke-font";
+
+const prepared = new WeakSet<BoardScene>();
+
+/** Import and standalone render preparation share the font stage for an immutable scene.
+ * Only successful scans are cached; cancellation and failed loads remain retryable. */
+export async function prepareBoardText(
+  scene: BoardScene,
+  signal?: AbortSignal,
+) {
+  signal?.throwIfAborted();
+  if (prepared.has(scene)) return;
+  const missing = await StrokeFont.prepare(scene.texts, signal);
+  signal?.throwIfAborted();
+  if (missing.size) {
+    const message = `原始文字缺少 ${missing.size} 种字形，暂用 ? 显示：${[...missing].slice(0, 16).join(" ")}`;
+    if (!scene.diagnostics.includes(message)) scene.diagnostics.push(message);
+  }
+  prepared.add(scene);
+}

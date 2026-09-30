@@ -1,4 +1,4 @@
-import type { IDisposable } from "../disposable";
+import { runCleanup, type IDisposable } from "../disposable";
 import type { GpuBatch } from "./webgpu-batch-uploader";
 import { GpuGeometry } from "./gpu-geometry";
 
@@ -18,17 +18,14 @@ export class GpuBatchSet implements IDisposable {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    const failures: unknown[] = [];
-    for (const owner of this.owners) {
-      try {
-        owner.dispose();
-      } catch (error) {
-        failures.push(error);
-      }
+    try {
+      runCleanup(
+        [...this.owners].map((owner) => () => owner.dispose()),
+        "GPU batch disposal failed",
+      );
+    } finally {
+      this.owners.clear();
+      this.batches.length = 0;
     }
-    this.owners.clear();
-    this.batches.length = 0;
-    if (failures.length)
-      throw new AggregateError(failures, "GPU batch disposal failed");
   }
 }

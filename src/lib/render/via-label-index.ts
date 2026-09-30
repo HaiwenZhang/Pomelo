@@ -1,4 +1,8 @@
-import { buildEnvelopeTree, type EnvelopeNode } from "../spatial/envelope-tree";
+import {
+  buildEnvelopeTree,
+  queryEnvelopeTree,
+  type EnvelopeNode,
+} from "../spatial/envelope-tree";
 import type { Bounds } from "../board/model";
 import type { Via } from "../board/model";
 
@@ -55,42 +59,29 @@ export class ViaLabelIndex {
   query(view: Bounds, scale: number, minimumPixels: number): readonly Via[] {
     this.lastExamined = 0;
     if (!this.root || scale <= 0 || !Number.isFinite(scale)) return [];
-    const ids: number[] = [];
-    const visit = (node: EnvelopeNode) => {
-      const pad = node.size;
-      if (
-        pad * scale < minimumPixels ||
-        node.maxX + pad < view.minX ||
-        node.minX - pad > view.maxX ||
-        node.maxY + pad < view.minY ||
-        node.minY - pad > view.maxY
-      )
-        return;
-      if (node.left) {
-        visit(node.left);
-        visit(node.right!);
-        return;
-      }
-      for (let i = node.start; i < node.end; i++) {
-        this.lastExamined++;
-        const id = this.order[i],
-          pad = this.diameters[id];
-        if (pad * scale < minimumPixels) continue;
+    const visible = (
+      minX: number,
+      minY: number,
+      maxX: number,
+      maxY: number,
+      pad: number,
+    ) =>
+      pad * scale >= minimumPixels &&
+      maxX + pad >= view.minX &&
+      minX - pad <= view.maxX &&
+      maxY + pad >= view.minY &&
+      minY - pad <= view.maxY;
+    const result = queryEnvelopeTree(
+      this.root,
+      this.order,
+      this.vias,
+      (node) => !visible(node.minX, node.minY, node.maxX, node.maxY, node.size),
+      (id) => {
         const [x, y] = this.vias[id].at;
-        if (
-          x + pad >= view.minX &&
-          x - pad <= view.maxX &&
-          y + pad >= view.minY &&
-          y - pad <= view.maxY
-        )
-          ids.push(id);
-      }
-    };
-    visit(this.root);
-    // Dense whole-board views already need the source scan; avoid sorting a
-    // million candidates when only the spatially local case benefits from it.
-    if (ids.length > this.vias.length / 2) return this.vias;
-    ids.sort((a, b) => a - b);
-    return ids.map((i) => this.vias[i]);
+        return visible(x, y, x, y, this.diameters[id]);
+      },
+    );
+    this.lastExamined = result.examined;
+    return result.values;
   }
 }

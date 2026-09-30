@@ -1,6 +1,7 @@
 import {
   buildEnvelopeTree,
   envelopeBufferSource,
+  queryEnvelopeTree,
   type EnvelopeNode,
 } from "../spatial/envelope-tree";
 import type { Bounds } from "../board/model";
@@ -73,39 +74,36 @@ export class TrackLabelIndex {
   query(view: Bounds, scale: number): readonly Segment[] {
     this.lastExamined = 0;
     if (!this.root || scale <= 0 || !Number.isFinite(scale)) return [];
-    const ids: number[] = [],
-      data = this.envelopes;
-    const visit = (node: EnvelopeNode) => {
-      if (
-        node.size * scale < LABEL_LAYOUT.trackMinimumWidth ||
-        node.maxX < view.minX ||
-        node.minX > view.maxX ||
-        node.maxY < view.minY ||
-        node.minY > view.maxY
-      )
-        return;
-      if (node.left) {
-        visit(node.left);
-        visit(node.right!);
-        return;
-      }
-      for (let i = node.start; i < node.end; i++) {
-        this.lastExamined++;
-        const id = this.order[i],
-          j = id * 5;
-        if (
-          data[j + 4] * scale >= LABEL_LAYOUT.trackMinimumWidth &&
-          data[j + 2] >= view.minX &&
-          data[j] <= view.maxX &&
-          data[j + 3] >= view.minY &&
-          data[j + 1] <= view.maxY
-        )
-          ids.push(id);
-      }
-    };
-    visit(this.root);
-    if (ids.length > this.segments.length / 2) return this.segments;
-    ids.sort((a, b) => a - b);
-    return ids.map((i) => this.segments[i]);
+    const data = this.envelopes;
+    const visible = (
+      minX: number,
+      minY: number,
+      maxX: number,
+      maxY: number,
+      size: number,
+    ) =>
+      size * scale >= LABEL_LAYOUT.trackMinimumWidth &&
+      maxX >= view.minX &&
+      minX <= view.maxX &&
+      maxY >= view.minY &&
+      minY <= view.maxY;
+    const result = queryEnvelopeTree(
+      this.root,
+      this.order,
+      this.segments,
+      (node) => !visible(node.minX, node.minY, node.maxX, node.maxY, node.size),
+      (id) => {
+        const j = id * 5;
+        return visible(
+          data[j],
+          data[j + 1],
+          data[j + 2],
+          data[j + 3],
+          data[j + 4],
+        );
+      },
+    );
+    this.lastExamined = result.examined;
+    return result.values;
   }
 }

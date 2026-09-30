@@ -1,5 +1,6 @@
-import { test, expect } from "vitest";
-import type { BoardScene } from "../../src/lib/board/model";
+import { test, expect, vi } from "vitest";
+import type { BoardScene, Point } from "../../src/lib/board/model";
+import { PadShape } from "../../src/lib/board/shapes/pad";
 
 import { PrimitiveBatchBuilder } from "../../src/lib/render/primitive-batch-builder";
 
@@ -48,4 +49,58 @@ test("copper upload preparation advances through every vertex and terminates", (
     "Preparation failed to terminate within its small input budget",
   ).toBeTruthy();
   expect(found).toBeTruthy();
+});
+
+test("a single large custom pad yields during vertex generation and can be closed", () => {
+  const custom = Array.from({ length: 5000 }, (_, i): Point => {
+    const angle = (i * Math.PI * 2) / 5000;
+    return [Math.cos(angle), Math.sin(angle)];
+  });
+  const scene: BoardScene = {
+    layers: [{ id: 0, name: "TOP", color: "#ffffff" }],
+    nets: new Map(),
+    segments: [],
+    vias: [],
+    zones: [],
+    texts: [],
+    drawingLayers: [],
+    outline: [],
+    diagnostics: [],
+    bounds: { minX: -1, minY: -1, maxX: 1, maxY: 1 },
+    pins: [
+      {
+        id: 1,
+        net: 0,
+        at: [0, 0],
+        reference: "U1",
+        name: "1",
+        angle: 0,
+        back: false,
+        drill: 0,
+        shapes: [
+          {
+            layer: 0,
+            type: 22,
+            width: 2,
+            height: 2,
+            offset: [0, 0],
+            custom: [custom],
+          },
+        ],
+      },
+    ],
+  };
+  const transform = vi.spyOn(PadShape.prototype, "toWorld");
+  try {
+    const steps = new PrimitiveBatchBuilder(scene).buildSteps();
+    const step = steps.next();
+    expect(step.done).toBe(false);
+    expect(step.value).toBeUndefined();
+    expect(transform.mock.calls.length).toBeGreaterThan(0);
+    expect(transform.mock.calls.length).toBeLessThan(custom.length);
+    steps.return(undefined);
+    expect(steps.next().done).toBe(true);
+  } finally {
+    transform.mockRestore();
+  }
 });

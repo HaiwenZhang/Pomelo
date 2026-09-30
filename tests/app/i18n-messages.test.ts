@@ -98,6 +98,10 @@ test("parser failures retain their format and useful values in the selected lang
     ["Altium 复合文件标记无效", "Invalid Altium compound file signature"],
     ["未知记录类型 0x43", "Unknown BRD record type 0x43"],
     ["KiCad 字符串未闭合", "KiCad string is not closed"],
+    [
+      "KiCad segment 引用未知网络 42",
+      "KiCad segment refers to undefined net 42",
+    ],
     ["PADS 分页目录无效", "Invalid PADS page directory"],
     ["ODB++ TAR 缺少结束记录", "ODB++ TAR is missing its end record"],
     ["HFSS 属性块截断", "HFSS property block is truncated"],

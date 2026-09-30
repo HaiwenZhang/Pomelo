@@ -12,8 +12,9 @@ import {
 } from "./primitive-batch-builder";
 import type { ColorMode } from "./color-mode";
 import { collectBorrowedOutlines } from "./borrowed-outline-collector";
-import { cooperative } from "../cooperative";
-import type { IDisposable } from "../disposable";
+import { completeSteps, completeStepsAsync } from "../iteration";
+import { runCleanup, type IDisposable } from "../disposable";
+import { primitiveLayout } from "./primitive-layout";
 
 export type GpuBatch = Omit<
   PrimitiveBatch,
@@ -185,7 +186,7 @@ export class WebGPUBatchUploader implements IDisposable {
           colorBuffer,
           count:
             batch.indices?.length ??
-            batch.data.length / (batch.triangles ? 6 : batch.arcs ? 20 : 12),
+            batch.data.length / primitiveLayout(batch).stride,
         });
         yield;
       }
@@ -193,8 +194,10 @@ export class WebGPUBatchUploader implements IDisposable {
       return packets;
     } finally {
       if (!complete) {
-        packets.dispose();
-        allocated.forEach((buffer) => buffer.destroy());
+        runCleanup([
+          () => packets.dispose(),
+          ...allocated.map((buffer) => () => buffer.destroy()),
+        ]);
       }
     }
   }
@@ -203,10 +206,7 @@ export class WebGPUBatchUploader implements IDisposable {
     value: BoardScene,
     options: UploadOptions = { kind: "scene" },
   ): GpuBatchSet {
-    const steps = this.uploadSteps(value, options);
-    let step = steps.next();
-    while (!step.done) step = steps.next();
-    return step.value;
+    return completeSteps(this.uploadSteps(value, options));
   }
 
   async uploadAsync(
@@ -214,22 +214,12 @@ export class WebGPUBatchUploader implements IDisposable {
     signal: AbortSignal,
     options: UploadOptions = { kind: "scene" },
   ) {
-    const steps = this.uploadSteps(value, options),
-      checkpoint =
-        options.kind === "selection"
-          ? cooperative(signal, 6, 16)
-          : cooperative(signal);
-    try {
-      while (true) {
-        signal.throwIfAborted();
-        const step = steps.next();
-        if (step.done) return step.value;
-        const pause = checkpoint();
-        if (pause) await pause;
-      }
-    } finally {
-      steps.return(new GpuBatchSet());
-    }
+    return completeStepsAsync(
+      this.uploadSteps(value, options),
+      signal,
+      options.kind === "selection" ? 6 : 8,
+      options.kind === "selection" ? 16 : 50,
+    );
   }
 
   dispose() {

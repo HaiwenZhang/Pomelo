@@ -83,3 +83,25 @@ test("path and polygon shapes agree on a closed contour without a parser", () =>
   expect(path.flatten()).toStrictEqual(ring);
   expect(polygon.triangulate().indices.length).toBe(6);
 });
+
+test.each([3, 5, 6, 11, 12, 27, 28])(
+  "pad type %i produces contours consistent with exact picking",
+  (type) => {
+    const shape = new PadShape({
+      layer: 0,
+      type,
+      width: 4,
+      height: 3,
+      offset: [0, 0],
+    });
+    const path = new PathShape(shape.paths()[0]);
+    for (let x = -2.2; x < 2.2; x += 0.17)
+      for (let y = -1.7; y < 1.7; y += 0.19) {
+        const distance = shape.distance([x, y], { at: [0, 0] });
+        if (Math.abs(distance) > 1e-8)
+          expect(path.contains([x, y])).toBe(distance < 0);
+      }
+    if (type === 3 || type === 28)
+      expect(path.data.every((edge) => !edge.arc)).toBe(true);
+  },
+);

@@ -1,4 +1,4 @@
-import type { IDisposable } from "../disposable";
+import { runCleanup, type IDisposable } from "../disposable";
 
 let nextIdentity = 1;
 /** Owns allocations; draw ranges merely reference this identity. Destruction
@@ -27,23 +27,16 @@ export class GpuGeometry implements IDisposable {
     if (this.destroyed) return;
     this.destroyed = true;
     // Notify first so no command cache can retain a replayable dead buffer.
-    const failures: unknown[] = [];
-    for (const listener of this.listeners) {
-      try {
-        listener();
-      } catch (error) {
-        failures.push(error);
-      }
+    try {
+      runCleanup(
+        [
+          ...this.listeners,
+          ...this.buffers.map((buffer) => () => buffer.destroy()),
+        ],
+        "GPU geometry disposal failed",
+      );
+    } finally {
+      this.listeners.clear();
     }
-    this.listeners.clear();
-    for (const buffer of this.buffers) {
-      try {
-        buffer.destroy();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures.length)
-      throw new AggregateError(failures, "GPU geometry disposal failed");
   }
 }

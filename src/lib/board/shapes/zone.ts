@@ -99,7 +99,13 @@ export class ZoneShape {
       return hit;
     };
     if (offsets.length < 2 || !inside(offsets[0], offsets[1])) return false;
-    for (let i = 1; i + 1 < offsets.length; i++)
+    const view = {
+      minX: point[0],
+      maxX: point[0],
+      minY: point[1],
+      maxY: point[1],
+    };
+    for (const i of this.holeCandidates(view))
       if (inside(offsets[i], offsets[i + 1])) return false;
     return true;
   }

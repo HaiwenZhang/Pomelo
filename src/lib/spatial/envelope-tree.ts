@@ -1,4 +1,5 @@
 import type { Bounds } from "../board/model";
+import { partitionMedian } from "./median-partition";
 
 export interface EnvelopeNode extends Bounds {
   size: number;
@@ -54,37 +55,38 @@ export function* buildEnvelopeTree(
     if (end - start <= 128) return result;
     const axis = result.maxX - result.minX >= result.maxY - result.minY ? 0 : 1;
     const mid = (start + end) >>> 1;
-    const center = (i: number) => source.center(order[i], axis);
-    let low = start,
-      high = end - 1,
-      work = 0;
-    while (low < high) {
-      const pivot = center((low + high) >>> 1);
-      let a = low,
-        b = high;
-      while (a <= b) {
-        while (center(a) < pivot) {
-          a++;
-          if ((++work & 4095) === 0) yield;
-        }
-        while (center(b) > pivot) {
-          b--;
-          if ((++work & 4095) === 0) yield;
-        }
-        if (a <= b) {
-          const swap = order[a];
-          order[a++] = order[b];
-          order[b--] = swap;
-        }
-        if ((++work & 4095) === 0) yield;
-      }
-      if (mid <= b) high = b;
-      else if (mid >= a) low = a;
-      else break;
-    }
+    yield* partitionMedian(order, (id) => source.center(id, axis), start, end);
     result.left = yield* node(start, mid);
     result.right = yield* node(mid, end);
     return result;
   }
   return order.length ? yield* node(0, order.length) : null;
+}
+
+/** Sparse queries restore source order; dense views avoid sorting most entries. */
+export function queryEnvelopeTree<T>(
+  root: EnvelopeNode | null,
+  order: Uint32Array,
+  values: readonly T[],
+  reject: (node: EnvelopeNode) => boolean,
+  accepts: (id: number) => boolean,
+): { values: readonly T[]; examined: number } {
+  const ids: number[] = [];
+  let examined = 0;
+  const visit = (node: EnvelopeNode) => {
+    if (reject(node)) return;
+    if (node.left) {
+      visit(node.left);
+      visit(node.right!);
+    } else
+      for (let i = node.start; i < node.end; i++) {
+        examined++;
+        const id = order[i];
+        if (accepts(id)) ids.push(id);
+      }
+  };
+  if (root) visit(root);
+  if (ids.length > values.length / 2) return { values, examined };
+  ids.sort((a, b) => a - b);
+  return { values: ids.map((id) => values[id]), examined };
 }

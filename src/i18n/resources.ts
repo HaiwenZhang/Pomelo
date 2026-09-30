@@ -366,6 +366,7 @@ const baseTranslations = {
         kicadDuplicateCopperLayer: "KiCad 重复铜层 {{detail}}",
         kicadInvalidNet: "KiCad 网络编号无效 {{detail}}",
         kicadUndefinedNet: "KiCad 网络编号没有定义 {{detail}}",
+        kicadUnknownObjectNet: "KiCad {{detail}} 引用未知网络 {{value}}",
         kicadUnknownTraceLayer: "KiCad 走线引用未知铜层 {{detail}}",
         kicadUnknownPadNet: "KiCad 焊盘引用未知网络 {{detail}}",
         kicadUnknownZoneNet: "KiCad 铜区引用未知网络 {{detail}}",
@@ -396,6 +397,8 @@ const baseTranslations = {
         padsSectionOutOfBounds: "PADS 分节 {{detail}} 超出数据区",
         padsUnverifiedVersion: "PADS 版本 {{detail}} 的布局尚待核验",
         padsOutOfBounds: "PADS 数据越界 {{detail}}+{{value}}/{{extra}}",
+        padsPourFieldRange: "PADS 铺铜字段越界 {{detail}}",
+        padsConnectionFieldRange: "PADS 连接字段越界 {{detail}}",
         padsInvalidCopperLayer: "PADS 铜区层号无效 {{detail}}",
         padsInvalidGuid: "PADS 尾部 GUID 无效",
         padsInvalidFooterPointer: "PADS 容器尾指针无效",
@@ -918,6 +921,8 @@ const baseTranslations = {
         kicadDuplicateCopperLayer: "Duplicate KiCad copper layer {{detail}}",
         kicadInvalidNet: "Invalid KiCad net number {{detail}}",
         kicadUndefinedNet: "Undefined KiCad net number {{detail}}",
+        kicadUnknownObjectNet:
+          "KiCad {{detail}} refers to undefined net {{value}}",
         kicadUnknownTraceLayer:
           "KiCad trace refers to unknown copper layer {{detail}}",
         kicadUnknownPadNet: "KiCad pad refers to unknown net {{detail}}",
@@ -957,6 +962,9 @@ const baseTranslations = {
           "PADS version {{detail}} has an unverified layout",
         padsOutOfBounds:
           "PADS data is out of bounds at {{detail}}+{{value}}/{{extra}}",
+        padsPourFieldRange: "PADS pour field is out of bounds at {{detail}}",
+        padsConnectionFieldRange:
+          "PADS connection field is out of bounds at {{detail}}",
         padsInvalidCopperLayer: "Invalid PADS copper layer number {{detail}}",
         padsInvalidGuid: "Invalid PADS footer GUID",
         padsInvalidFooterPointer: "Invalid PADS container footer pointer",

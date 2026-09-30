@@ -1,9 +1,40 @@
 import type { i18n } from "i18next";
 import { viewerI18n } from "../i18n";
 
-type ErrorValues = Record<string, string | number>;
+type LocalizedValue = {
+  key: string;
+  values?: Readonly<Record<string, string | number>>;
+};
+type ErrorValues = Readonly<Record<string, string | number | LocalizedValue>>;
 
-/** Resolve parser failures when they occur, using the currently selected language. */
+/** Keep source details available when the UI language changes after a failure. */
+export class ParserError extends Error {
+  readonly params: ErrorValues;
+  constructor(
+    readonly code: string,
+    params: ErrorValues = {},
+    message = code,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "ParserError";
+    this.params = Object.freeze({ ...params });
+  }
+  localize(translator: i18n): string {
+    return parserMessage(this.code, this.params, translator);
+  }
+}
+
+export type VisibleError = string | ParserError;
+export function visibleError(error: unknown): VisibleError {
+  return error instanceof ParserError
+    ? error
+    : error instanceof Error
+      ? error.message
+      : String(error);
+}
+
+/** Messages remain useful to callers; structured failures can be translated again. */
 export function parserMessage(
   key: string,
   values: ErrorValues = {},
@@ -12,15 +43,21 @@ export function parserMessage(
   const path = `parserErrors.${key}`;
   if (!translator.exists(path))
     throw new Error(`Missing parser translation: ${path}`);
-  return translator.t(path, values);
+  const resolved = Object.fromEntries(
+    Object.entries(values).map(([name, value]) => [
+      name,
+      typeof value === "object" ? translator.t(value.key, value.values) : value,
+    ]),
+  );
+  return translator.t(path, resolved);
 }
 
 export function parserError(
   key: string,
   values: ErrorValues = {},
   translator: i18n = viewerI18n,
-): Error {
-  return new Error(parserMessage(key, values, translator));
+): ParserError {
+  return new ParserError(key, values, parserMessage(key, values, translator));
 }
 
 export function hfssDefError(
@@ -28,13 +65,16 @@ export function hfssDefError(
   offset: number,
   id?: string | number,
   translator: i18n = viewerI18n,
-): Error {
+): ParserError {
   const path = `hfssDefReasons.${reason}`;
   if (!translator.exists(path))
     throw new Error(`Missing parser translation: ${path}`);
   return parserError(
     "hfssDefError",
-    { detail: translator.t(path, { id }), value: `0x${offset.toString(16)}` },
+    {
+      detail: { key: path, values: id === undefined ? {} : { id } },
+      value: `0x${offset.toString(16)}`,
+    },
     translator,
   );
 }

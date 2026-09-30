@@ -51,11 +51,17 @@ export class BoardTextStrokeBuilder {
   }
   /** Board text is sized in mm and has no automatic-label size cap. */
   static build(text: BoardText): TextStroke[] {
+    const result: TextStroke[] = [];
+    for (const stroke of BoardTextStrokeBuilder.buildSteps(text))
+      if (stroke) result.push(stroke);
+    return result;
+  }
+  /** Stream strokes and yield even for long runs of whitespace. */
+  static *buildSteps(text: BoardText): Generator<TextStroke | undefined> {
     // Otherwise every glyph collapses into a point which the GPU hairline rule
     // would incorrectly turn into a visible dot, even at extreme magnification.
-    if (new TextShape(text).isZeroSize()) return [];
-    const result: TextStroke[] = [],
-      cos = Math.cos(text.angle),
+    if (new TextShape(text).isZeroSize()) return;
+    const cos = Math.cos(text.angle),
       sin = Math.sin(text.angle),
       mirror = text.mirrored ? -1 : 1;
     const transform = (x: number, y: number): Point => [
@@ -63,6 +69,7 @@ export class BoardTextStrokeBuilder {
       text.at[1] + mirror * x * sin + y * cos,
     ];
     // Zero photo width is a hairline: the GPU applies its minimum pixel coverage.
+    let work = 0;
     for (const [row, line] of text.text
       .replace(/\r\n?/g, "\n")
       .replace(/\t/g, "    ")
@@ -79,7 +86,8 @@ export class BoardTextStrokeBuilder {
           : text.align === "center"
             ? -length / 2
             : 0;
-      for (const [column, ch] of characters.entries())
+      for (const [column, ch] of characters.entries()) {
+        if ((++work & 255) === 0) yield;
         for (const path of BoardTextStrokeBuilder.glyphPaths(ch)) {
           const points = path.map((p) =>
             transform(
@@ -88,13 +96,13 @@ export class BoardTextStrokeBuilder {
             ),
           );
           for (let i = 1; i < points.length; i++)
-            result.push({
+            yield {
               a: points[i - 1],
               b: points[i],
               width: text.strokeWidth,
-            });
+            };
         }
+      }
     }
-    return result;
   }
 }

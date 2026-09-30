@@ -1,4 +1,4 @@
-import { cooperative } from "../cooperative";
+import { completeSteps, completeStepsAsync } from "../iteration";
 import type { BoardScene } from "./model";
 export type SearchItem =
   | {
@@ -15,48 +15,70 @@ export type SearchItem =
     };
 /** Search entries retain scene insertion order; asynchronous preparation supports cancellation. */
 export class BoardSearchIndex {
-  constructor(readonly data: SearchItem[]) {}
+  private readonly entries: {
+    item: SearchItem;
+    name: string;
+    sequence: number;
+  }[];
+  constructor(readonly data: SearchItem[]) {
+    this.entries = data.map((item, sequence) => ({
+      item,
+      name: item.name.toLocaleLowerCase(),
+      sequence,
+    }));
+  }
   static buildItems(scene: BoardScene): SearchItem[] {
-    const steps = BoardSearchIndex.steps(scene);
-    let step = steps.next();
-    while (!step.done) step = steps.next();
-    return step.value;
+    return completeSteps(BoardSearchIndex.steps(scene));
   }
   /** Finish before publishing the scene; React consumes only the prepared list. */
   static async buildItemsAsync(
     scene: BoardScene,
     signal?: AbortSignal,
   ): Promise<SearchItem[]> {
-    const steps = BoardSearchIndex.steps(scene),
-      pauseIfNeeded = cooperative(signal, 8);
-    signal?.throwIfAborted();
-    try {
-      let step = steps.next();
-      while (!step.done) {
-        const pause = pauseIfNeeded();
-        if (pause) await pause;
-        step = steps.next();
-      }
-      return step.value;
-    } finally {
-      steps.return([]);
-    }
+    return completeStepsAsync(BoardSearchIndex.steps(scene), signal);
   }
   find(query: string, limit = 20): SearchItem[] {
-    const items = this.data;
     const text = query.trim().toLocaleLowerCase();
-    if (!text) return [];
-    return items
-      .map((item) => ({ item, name: item.name.toLocaleLowerCase() }))
-      .filter((item) => item.name.includes(text))
-      .sort(
-        (a, b) =>
-          Number(b.name === text) - Number(a.name === text) ||
-          Number(b.name.startsWith(text)) - Number(a.name.startsWith(text)) ||
-          a.name.localeCompare(b.name),
-      )
-      .slice(0, limit)
-      .map((value) => value.item);
+    const count = Math.min(this.entries.length, Math.floor(limit));
+    if (!text || !(count > 0)) return [];
+    type Entry = (typeof this.entries)[number];
+    const compare = (a: Entry, b: Entry) =>
+      Number(b.name === text) - Number(a.name === text) ||
+      Number(b.name.startsWith(text)) - Number(a.name.startsWith(text)) ||
+      a.name.localeCompare(b.name) ||
+      a.sequence - b.sequence;
+    // Keep only the best results, with the worst one at the heap root.
+    // Scene names are normalized once; queries allocate at most `limit` entries.
+    const best: Entry[] = [];
+    for (const entry of this.entries) {
+      if (!entry.name.includes(text)) continue;
+      if (best.length < count) {
+        let i = best.length;
+        best.push(entry);
+        while (i > 0) {
+          const parent = (i - 1) >>> 1;
+          if (compare(best[parent], entry) >= 0) break;
+          best[i] = best[parent];
+          i = parent;
+        }
+        best[i] = entry;
+      } else if (compare(entry, best[0]) < 0) {
+        let i = 0;
+        while (i * 2 + 1 < best.length) {
+          let child = i * 2 + 1;
+          if (
+            child + 1 < best.length &&
+            compare(best[child + 1], best[child]) > 0
+          )
+            child++;
+          if (compare(entry, best[child]) >= 0) break;
+          best[i] = best[child];
+          i = child;
+        }
+        best[i] = entry;
+      }
+    }
+    return best.sort(compare).map((entry) => entry.item);
   }
   private static *steps(scene: BoardScene): Generator<undefined, SearchItem[]> {
     const nets = new Map<number, number>(),

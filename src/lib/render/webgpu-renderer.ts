@@ -1,5 +1,6 @@
 import type { ProgressReporter } from "../progress";
 import { LatestTask } from "../latest-task";
+import { nextFrame, withAbort } from "../async-wait";
 import { OverlayController } from "./overlay-controller";
 import { GpuScene } from "./gpu-scene";
 import { ScenePreparation } from "./scene-preparation";
@@ -9,7 +10,7 @@ import type { BoardScene, Bounds, Point, Zone } from "../board/model";
 
 import { type DisplayOptions } from "../board/display";
 import type { SearchItem } from "../board/search";
-import { Disposables } from "../disposable";
+import { Disposables, runCleanup } from "../disposable";
 import type { ViewportInsets } from "../interaction/camera";
 import { BoardViewport } from "../interaction/board-viewport";
 import { CanvasInteractionController } from "../interaction/canvas-interaction";
@@ -280,11 +281,12 @@ export class WebGPURenderer extends Renderer {
       this.attachScene(prepared);
       prepared = null;
       progress?.({ phase: "等待首帧", fraction: 0.9 });
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve()),
-      );
+      await nextFrame(controller.signal);
       task.assertCurrent();
-      await this.resources.device.queue.onSubmittedWorkDone();
+      await withAbort(
+        this.resources.device.queue.onSubmittedWorkDone(),
+        controller.signal,
+      );
       task.assertCurrent();
     } catch (error) {
       prepared?.dispose();
@@ -353,15 +355,18 @@ export class WebGPURenderer extends Renderer {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.events.abort();
-    this.input.dispose();
-    this.tooltip.dispose();
-    this.viewport.dispose();
-    this.overlay.dispose();
-    this.sceneTasks.dispose();
-    cancelAnimationFrame(this.animationFrame);
-    this.gpuScene?.dispose();
+    const scene = this.gpuScene;
     this.gpuScene = null;
-    this.disposables.dispose();
+    runCleanup([
+      () => this.events.abort(),
+      () => this.input.dispose(),
+      () => this.tooltip.dispose(),
+      () => this.viewport.dispose(),
+      () => this.overlay.dispose(),
+      () => this.sceneTasks.dispose(),
+      () => cancelAnimationFrame(this.animationFrame),
+      () => scene?.dispose(),
+      () => this.disposables.dispose(),
+    ]);
   }
 }

@@ -19,6 +19,8 @@ import {
 } from "../../src/lib/interaction/picking";
 
 import { Camera } from "../../src/lib/interaction/camera";
+import { PrimitiveBatchBuilder } from "../../src/lib/render/primitive-batch-builder";
+import { buildDrawingBatches } from "../../src/lib/render/drawing-batch-builder";
 
 const segment = (
   id: number,
@@ -110,6 +112,71 @@ test("overlap picking follows active layer, manual priorities and category visib
   ).toBe(null);
   expect(index.pick([0, 0], 100, { ...display, opacity: 0 })).toBe(null);
   expect(index.pick([0, 0], 100, display, "via")).toBe(null);
+});
+
+test.each([false, true])(
+  "overlap picking and locating follow line/arc submission order (reversed: %s)",
+  (reversed) => {
+    const arc: Segment = {
+      ...segment(1, 0, [1, 0], [0, 1], 1),
+      width: 0.1,
+      arc: { center: [0, 0], radius: 1, start: 0, sweep: Math.PI / 2 },
+    };
+    const line = { ...segment(2, 0, [1, -1], [1, 1], 2), width: 0.1 };
+    const scene = board({ segments: reversed ? [line, arc] : [arc, line] });
+    const batches = new PrimitiveBatchBuilder(scene, "net")
+      .build()
+      .filter((batch) => batch.category === "etch" && batch.data.length > 0);
+    expect(batches.map((batch) => !!batch.arcs)).toEqual([false, true]);
+    const index = new BoardIndex(scene),
+      display = BoardDisplay.createDisplayOptions();
+    expect(index.pick([1, 0], 100, display)?.object.value.id).toBe(arc.id);
+    line.net = 1;
+    const sameNetIndex = new BoardIndex(scene);
+    expect(
+      sameNetIndex.find({ kind: "net", id: 1, name: "GND", count: 2 }, display)
+        ?.anchor.object.value.id,
+    ).toBe(arc.id);
+  },
+);
+
+test("drawing picking follows line/arc passes within each bounded batch", () => {
+  const layer = 0x10000;
+  const arc: Segment = {
+    ...segment(1, layer, [1, 0], [0, 1], 0),
+    width: 0.1,
+    arc: { center: [0, 0], radius: 1, start: 0, sweep: Math.PI / 2 },
+  };
+  const line = { ...segment(2, layer, [1, -1], [1, 1], 0), width: 0.1 };
+  const drawing = (id: number, segments: Segment[]) => ({
+    id,
+    layer,
+    net: 0 as const,
+    graphicIds: [],
+    texts: [],
+    segments,
+  });
+  const scene = board({
+    drawingLayers: [
+      { id: layer, name: "Graphics", color: "#ffffff", defaultVisible: true },
+    ],
+    drawings: [drawing(10, [arc]), drawing(20, [line])],
+  });
+  const display = BoardDisplay.createDisplayOptions(scene.drawingLayers);
+  expect(
+    new BoardIndex(scene).pick([1, 0], 100, display)?.object.value.id,
+  ).toBe(10);
+  scene.drawings![0].segments = [
+    arc,
+    ...Array.from({ length: BoardDisplay.drawingBatchSize - 1 }, (_, i) =>
+      segment(i + 3, layer, [10, 10], [11, 11], 0),
+    ),
+  ];
+  const batches = [...buildDrawingBatches(scene)].filter((batch) => !!batch);
+  expect(batches.map((batch) => !!batch?.arcs)).toEqual([false, true, false]);
+  expect(
+    new BoardIndex(scene).pick([1, 0], 100, display)?.object.value.id,
+  ).toBe(20);
 });
 
 test("copper holes are excluded; transparent copper is picked only along its boundary", () => {

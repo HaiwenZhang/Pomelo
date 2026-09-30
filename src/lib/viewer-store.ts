@@ -13,6 +13,8 @@ import type {
 import type { ProgressReporter } from "./progress";
 import type { SelectionTaskState } from "./render/renderer";
 import type { ColorMode } from "./render/color-mode";
+import { visibleError, type VisibleError } from "./parser-error";
+import { LatestTask } from "./latest-task";
 
 type Update<T> = T | ((previous: T) => T);
 export interface ScenePresentation {
@@ -36,7 +38,7 @@ export interface ViewerState {
   selectionMode: SelectionMode;
   phase: string;
   progress: number | null;
-  error: string;
+  error: VisibleError;
   gpu: string;
   gpuError: string;
   setDisplay: (value: Update<DisplayOptions>) => void;
@@ -48,7 +50,7 @@ export interface ViewerState {
   setSelectionMode: (value: SelectionMode) => void;
   setGpu: (value: string) => void;
   setGpuError: (value: string) => void;
-  setError: (value: string) => void;
+  setError: (value: VisibleError) => void;
   open: (
     source?: BoardSource,
     presentation?: ScenePresentation,
@@ -58,7 +60,7 @@ export interface ViewerState {
 }
 /** Board objects retain identity. GPU resources and per-frame camera state stay outside React. */
 export function createViewerStore(load: BoardLoader = loadBoard) {
-  let task: AbortController | null = null;
+  const tasks = new LatestTask();
   return createStore<ViewerState>()((set) => ({
     scene: null,
     searchItems: [],
@@ -92,16 +94,14 @@ export function createViewerStore(load: BoardLoader = loadBoard) {
     setGpuError: (gpuError) => set({ gpuError }),
     setError: (error) => set({ error }),
     cancel: () => {
-      task?.abort();
-      task = null;
+      tasks.cancel();
       set({ progress: null, phase: "已取消" });
     },
     open: async (source, presentation, encoding = "utf-8") => {
       if (!source) return;
-      task?.abort();
-      const controller = new AbortController();
-      task = controller;
-      const current = () => task === controller && !controller.signal.aborted;
+      const task = tasks.start(),
+        controller = task.controller;
+      const current = () => task.isCurrent && !task.signal.aborted;
       set({
         scene: null,
         searchItems: [],
@@ -129,10 +129,10 @@ export function createViewerStore(load: BoardLoader = loadBoard) {
           report,
           encoding,
         );
-        controller.signal.throwIfAborted();
+        task.assertCurrent();
         if (presentation) {
           await presentation.prepare(scene, controller.signal, report);
-          controller.signal.throwIfAborted();
+          task.assertCurrent();
         }
         if (current())
           set({
@@ -144,13 +144,13 @@ export function createViewerStore(load: BoardLoader = loadBoard) {
       } catch (error) {
         if (current())
           set({
-            error: error instanceof Error ? error.message : String(error),
+            error: visibleError(error),
           });
       } finally {
-        if (task === controller) {
-          task = null;
+        if (task.isCurrent) {
           set({ progress: null });
         }
+        task.finish();
       }
     },
   }));

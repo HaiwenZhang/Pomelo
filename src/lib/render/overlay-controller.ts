@@ -1,7 +1,10 @@
 import { LatestTask, type TaskTicket } from "../latest-task";
 import { BoardDisplay, type DisplayOptions } from "../board/display";
 import type { BoardScene, Bounds } from "../board/model";
-import { cooperative } from "../cooperative";
+import { completeStepsAsync } from "../iteration";
+import { nextFrame, withAbort } from "../async-wait";
+import { collectBorrowedOutlines } from "./borrowed-outline-collector";
+import { runCleanup } from "../disposable";
 import {
   selectionScene,
   selectionSceneSteps,
@@ -85,18 +88,7 @@ export class OverlayController {
     steps: Generator<void, T>,
     signal: AbortSignal,
   ): Promise<T> {
-    const checkpoint = cooperative(signal, 6, 16);
-    try {
-      while (true) {
-        signal.throwIfAborted();
-        const step = steps.next();
-        if (step.done) return step.value;
-        const pause = checkpoint();
-        if (pause) await pause;
-      }
-    } finally {
-      steps.return(undefined as T);
-    }
+    return completeStepsAsync(steps, signal, 6, 16);
   }
 
   startSelection(
@@ -145,11 +137,12 @@ export class OverlayController {
         this.resources.onSelection?.(value);
         this.invalidate();
         this.resources.onSelectionTask?.({ phase: "显示选择" });
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => resolve()),
-        );
+        await nextFrame(signal);
         task.assertCurrent();
-        await this.resources.device.queue.onSubmittedWorkDone();
+        await withAbort(
+          this.resources.device.queue.onSubmittedWorkDone(),
+          signal,
+        );
         task.assertCurrent();
       } catch (error) {
         owned.dispose();
@@ -204,19 +197,18 @@ export class OverlayController {
       const outlines = await renderer.collect(
         (function* () {
           const result: GpuBatch[] = [];
-          for (let i = 0; i < zones.length; i++) {
-            if ((i & 63) === 0) yield;
-            for (const {
-              batch,
-              start,
-              count,
-            } of renderer.uploader.zoneOutlines.get(zones[i].id) ?? [])
-              if (BoardDisplay.isBatchVisible(visibility, batch, true))
-                result.push({
-                  ...batch,
-                  firstInstance: start,
-                  count,
-                });
+          for (const range of collectBorrowedOutlines(
+            zones.map((zone) => zone.id),
+            renderer.uploader.zoneOutlines,
+          )) {
+            if (!range) {
+              yield;
+              continue;
+            }
+            const { batch, start, count } = range;
+            if (BoardDisplay.isBatchVisible(visibility, batch, true))
+              result.push({ ...batch, firstInstance: start, count });
+            yield;
           }
           return result;
         })(),
@@ -316,12 +308,17 @@ export class OverlayController {
     this.pendingHover = null;
     this.selectionTasks.dispose();
     this.hoverTasks.dispose();
-    this.selectionPackets.dispose();
-    this.hoverPackets.dispose();
-    this.selectionBatches = [];
-    this.hoverBatches = [];
-    this.selection = null;
-    this.hover = null;
-    this.hoverMembers = null;
+    try {
+      runCleanup([
+        () => this.selectionPackets.dispose(),
+        () => this.hoverPackets.dispose(),
+      ]);
+    } finally {
+      this.selectionBatches = [];
+      this.hoverBatches = [];
+      this.selection = null;
+      this.hover = null;
+      this.hoverMembers = null;
+    }
   }
 }

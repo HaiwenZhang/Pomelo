@@ -9,6 +9,39 @@ export interface IDisposable {
   dispose(): void;
 }
 
+/** A failure in one release must not prevent the remaining owned resources from closing. */
+export function runCleanup(
+  actions: Iterable<() => void>,
+  message = "Resource cleanup failed",
+) {
+  const errors: unknown[] = [];
+  for (const action of actions) {
+    try {
+      action();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, message);
+}
+
+/** Preserve the operation failure while also reporting any rollback failures. */
+export function cleanupAfterFailure(
+  failure: unknown,
+  actions: Iterable<() => void>,
+): never {
+  try {
+    runCleanup(actions);
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [failure, cleanupError],
+      "Operation and cleanup failed",
+      { cause: failure },
+    );
+  }
+  throw failure;
+}
+
 /** A collection of disposable items that can be disposed of together. */
 export class Disposables implements IDisposable {
   private readonly disposables = new Set<IDisposable>();
@@ -25,8 +58,7 @@ export class Disposables implements IDisposable {
 
   disposeAndRemove<T extends IDisposable>(item: T): void {
     if (!item) return;
-    item.dispose();
-    this.disposables.delete(item);
+    if (this.disposables.delete(item)) item.dispose();
   }
 
   get isDisposed(): boolean {
@@ -34,12 +66,12 @@ export class Disposables implements IDisposable {
   }
 
   dispose(): void {
-    if (this.disposed) {
-      console.trace("dispose() called on an already disposed resource");
-      return;
-    }
-    for (const item of this.disposables) item.dispose();
-    this.disposables.clear();
+    if (this.disposed) return;
     this.disposed = true;
+    try {
+      runCleanup([...this.disposables].map((item) => () => item.dispose()));
+    } finally {
+      this.disposables.clear();
+    }
   }
 }

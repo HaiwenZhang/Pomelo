@@ -1,85 +1,9 @@
-import {
-  buildEnvelopeTree,
-  envelopeBufferSource,
-  type EnvelopeNode,
-} from "../spatial/envelope-tree";
+import { EnvelopeIndex } from "../spatial/envelope-index";
 import type { BoardScene, Bounds, Pin, Zone } from "../board/model";
 import { ZoneShape } from "../board/shapes/zone";
 
 import { completeSteps, completeStepsAsync } from "../iteration";
 import { FontMetrics, LABEL_LAYOUT, type FontAtlas } from "./font-metrics";
-
-/** Bounds and maximum possible glyph height, independent of display switches.
- * Candidates keep source order; all final layout and visibility rules stay in labels.ts. */
-class EnvelopeIndex<T> {
-  private order: Uint32Array;
-  private data: Float64Array;
-  private root: EnvelopeNode | null = null;
-  lastExamined = 0;
-  constructor(
-    private values: readonly T[],
-    private envelope: (value: T) => [Bounds, number],
-  ) {
-    this.order = new Uint32Array(values.length);
-    this.data = new Float64Array(values.length * 5);
-  }
-  *build(): Generator<void> {
-    for (let i = 0; i < this.values.length; i++) {
-      const [b, size] = this.envelope(this.values[i]),
-        j = i * 5;
-      this.order[i] = i;
-      this.data[j] = b.minX;
-      this.data[j + 1] = b.minY;
-      this.data[j + 2] = b.maxX;
-      this.data[j + 3] = b.maxY;
-      this.data[j + 4] = size;
-      if ((i & 1023) === 0) yield;
-    }
-    this.root = yield* buildEnvelopeTree(
-      this.order,
-      envelopeBufferSource(this.data),
-    );
-  }
-  query(view: Bounds, scale: number, minimum: number): readonly T[] {
-    this.lastExamined = 0;
-    if (!this.root || scale <= 0 || !Number.isFinite(scale)) return [];
-    const ids: number[] = [],
-      d = this.data;
-    // A small margin avoids rejecting a threshold survivor due to reassociation
-    // of the viewport-relative arithmetic used in the final layout.
-    const invisible = (
-      minX: number,
-      minY: number,
-      maxX: number,
-      maxY: number,
-      size: number,
-    ) =>
-      size * scale < minimum - 1e-7 ||
-      maxX < view.minX ||
-      minX > view.maxX ||
-      maxY < view.minY ||
-      minY > view.maxY;
-    const visit = (n: EnvelopeNode) => {
-      if (invisible(n.minX, n.minY, n.maxX, n.maxY, n.size)) return;
-      if (n.left) {
-        visit(n.left);
-        visit(n.right!);
-        return;
-      }
-      for (let i = n.start; i < n.end; i++) {
-        this.lastExamined++;
-        const id = this.order[i],
-          j = id * 5;
-        if (!invisible(d[j], d[j + 1], d[j + 2], d[j + 3], d[j + 4]))
-          ids.push(id);
-      }
-    };
-    visit(this.root);
-    if (ids.length > this.values.length / 2) return this.values;
-    ids.sort((a, b) => a - b);
-    return ids.map((id) => this.values[id]);
-  }
-}
 
 /** Remaining automatic-label categories: one entry per pin/zone, never per layer. */
 export class AreaLabelIndex {

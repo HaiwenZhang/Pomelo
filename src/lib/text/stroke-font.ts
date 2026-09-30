@@ -40,11 +40,17 @@ export class StrokeFont {
   ) {
     signal?.throwIfAborted();
     const needed = new Set<number>(),
+      missing = new Set<string>(),
       checkpoint = cooperative(signal);
     let work = 0;
     for (const { text } of texts)
       for (const ch of text) {
         const block = ch.codePointAt(0)! >>> 8;
+        if (
+          StrokeFont.glyph(ch) === undefined &&
+          !["\n", "\r", "\t"].includes(ch)
+        )
+          missing.add(ch);
         if (
           StrokeFont.glyph(ch) === undefined &&
           StrokeFont.available.has(block) &&
@@ -77,5 +83,8 @@ export class StrokeFont {
       StrokeFont.loaded.add(block);
     }
     signal?.throwIfAborted();
+    for (const ch of missing)
+      if (StrokeFont.glyph(ch) !== undefined) missing.delete(ch);
+    return missing;
   }
 }

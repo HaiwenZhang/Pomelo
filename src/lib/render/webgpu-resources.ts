@@ -4,7 +4,12 @@ import type { SelectionTaskState } from "./renderer";
 import { CurveFillLayer } from "./curve-fill-layer";
 import { LabelAtlas } from "./label-atlas";
 import { arcVertexBuffers } from "./arc-batch-builder";
-import { Disposables, type IDisposable } from "../disposable";
+import {
+  Disposables,
+  cleanupAfterFailure,
+  type IDisposable,
+} from "../disposable";
+import { STROKE_PACKET, TRIANGLE_PACKET } from "./primitive-layout";
 
 interface ResourceFields {
   format: GPUTextureFormat;
@@ -122,7 +127,8 @@ export class WebGPUResources implements IDisposable {
           entryPoint: "vs",
           buffers: [
             {
-              arrayStride: 48,
+              arrayStride:
+                STROKE_PACKET.stride * Float32Array.BYTES_PER_ELEMENT,
               stepMode: "instance",
               attributes: [
                 { shaderLocation: 0, offset: 0, format: "float32x4" },
@@ -131,7 +137,8 @@ export class WebGPUResources implements IDisposable {
               ],
             },
             {
-              arrayStride: 16,
+              arrayStride:
+                STROKE_PACKET.positions * Float32Array.BYTES_PER_ELEMENT,
               stepMode: "instance",
               attributes: [
                 { shaderLocation: 3, offset: 0, format: "float32x4" },
@@ -185,14 +192,16 @@ export class WebGPUResources implements IDisposable {
           entryPoint: "vs",
           buffers: [
             {
-              arrayStride: 24,
+              arrayStride:
+                TRIANGLE_PACKET.stride * Float32Array.BYTES_PER_ELEMENT,
               attributes: [
                 { shaderLocation: 0, offset: 0, format: "float32x2" },
                 { shaderLocation: 1, offset: 8, format: "float32x4" },
               ],
             },
             {
-              arrayStride: 8,
+              arrayStride:
+                TRIANGLE_PACKET.positions * Float32Array.BYTES_PER_ELEMENT,
               attributes: [
                 { shaderLocation: 2, offset: 0, format: "float32x2" },
               ],
@@ -322,7 +331,7 @@ export class WebGPUResources implements IDisposable {
         layout: polygonPipeline.getBindGroupLayout(0),
         entries: [{ binding: 0, resource: { buffer: hoverUniform } }],
       });
-      const labels = await LabelAtlas.create(device, format, uniform);
+      const labels = await LabelAtlas.create(device, format, uniform, signal);
       pending.push(labels);
       const maskPipeline = await device.createRenderPipelineAsync({
         ...copperDescriptor,
@@ -374,10 +383,13 @@ export class WebGPUResources implements IDisposable {
         hoverPolygonBind,
       });
     } catch (error) {
-      for (let i = pending.length - 1; i >= 0; i--) pending[i].dispose();
-      if (configured) context.unconfigure();
-      device.destroy();
-      throw error;
+      cleanupAfterFailure(error, [
+        ...pending.reverse().map((item) => () => item.dispose()),
+        () => {
+          if (configured) context.unconfigure();
+        },
+        () => device.destroy(),
+      ]);
     }
   }
 

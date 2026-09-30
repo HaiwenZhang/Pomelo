@@ -1,13 +1,14 @@
 import type { ProgressReporter } from "../progress";
 import type { BoardScene } from "../board/model";
 import { BoardIndex } from "../interaction/picking";
-import { StrokeFont } from "../text/stroke-font";
+import { prepareBoardText } from "../text/board-text-preparation";
 import { ViaLabelIndex } from "./via-label-index";
 import { TrackLabelIndex } from "./track-label-index";
 import { AreaLabelIndex } from "./area-label-index";
 import type { FontAtlas } from "./font-metrics";
 import { WebGPUBatchUploader } from "./webgpu-batch-uploader";
 import { GpuScene } from "./gpu-scene";
+import { cleanupAfterFailure } from "../disposable";
 
 /** CPU preparation and upload publish a single owned result. No viewer state is
  * changed here; cancellation/failure cannot publish a partially prepared board. */
@@ -38,9 +39,10 @@ export class ScenePreparation {
         uploader,
       );
     } catch (error) {
-      packets.dispose();
-      uploader.dispose();
-      throw error;
+      cleanupAfterFailure(error, [
+        () => packets.dispose(),
+        () => uploader.dispose(),
+      ]);
     }
   }
 
@@ -51,7 +53,7 @@ export class ScenePreparation {
   ) {
     signal.throwIfAborted();
     progress?.({ phase: "读取原始文字字形", fraction: 0 });
-    await StrokeFont.prepare(source.texts ?? [], signal);
+    await prepareBoardText(source, signal);
     progress?.({ phase: "构建拾取索引", fraction: 0.15 });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const index = await BoardIndex.create(source, signal);
@@ -84,9 +86,10 @@ export class ScenePreparation {
         uploader,
       );
     } catch (error) {
-      packets.dispose();
-      uploader.dispose();
-      throw error;
+      cleanupAfterFailure(error, [
+        () => packets.dispose(),
+        () => uploader.dispose(),
+      ]);
     }
   }
 }

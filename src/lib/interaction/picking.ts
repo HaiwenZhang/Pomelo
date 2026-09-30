@@ -22,7 +22,8 @@ import { ZoneShape } from "../board/shapes/zone";
 import { type DisplayCategory, type DisplayOptions } from "../board/display";
 import type { SearchItem } from "../board/search";
 import { PolygonShape } from "../board/shapes/polygon";
-import { cooperative } from "../cooperative";
+import { completeSteps, completeStepsAsync } from "../iteration";
+import { partitionMedian } from "../spatial/median-partition";
 export const lineDistance = (point: Point, a: Point, b: Point) =>
   new LineShape(a, b).distance(point);
 export const segmentDistance = (point: Point, segment: Segment) =>
@@ -143,34 +144,7 @@ function* buildSpatialNode(
       ? entry.bounds.minX + entry.bounds.maxX
       : entry.bounds.minY + entry.bounds.maxY;
   const mid = (start + end) >>> 1;
-  // In-place median partition replaces synchronous sorts and recursive copies.
-  let low = start,
-    high = end - 1,
-    work = 0;
-  while (low < high) {
-    const pivot = key(entries[(low + high) >>> 1]);
-    let a = low,
-      b = high;
-    while (a <= b) {
-      while (key(entries[a]) < pivot) {
-        a++;
-        if ((++work & 16383) === 0) yield;
-      }
-      while (key(entries[b]) > pivot) {
-        b--;
-        if ((++work & 16383) === 0) yield;
-      }
-      if (a <= b) {
-        const swap = entries[a];
-        entries[a++] = entries[b];
-        entries[b--] = swap;
-      }
-      if ((++work & 16383) === 0) yield;
-    }
-    if (mid <= b) high = b;
-    else if (mid >= a) low = a;
-    else break;
-  }
+  yield* partitionMedian(entries, key, start, end);
   return {
     bounds,
     left: yield* buildSpatialNode(entries, start, mid),
@@ -189,18 +163,12 @@ export class BoardIndex {
     readonly scene: BoardScene,
     deferred = false,
   ) {
-    if (!deferred) for (const _ of this.build()) void _;
+    if (!deferred) completeSteps(this.build());
   }
   static async create(scene: BoardScene, signal?: AbortSignal) {
     signal?.throwIfAborted();
-    const index = new BoardIndex(scene, true),
-      checkpoint = cooperative(signal);
-    for (const _ of index.build()) {
-      void _;
-      const pause = checkpoint();
-      if (pause) await pause;
-    }
-    signal?.throwIfAborted();
+    const index = new BoardIndex(scene, true);
+    await completeStepsAsync(index.build(), signal);
     return index;
   }
   private *build(): Generator<void> {
@@ -222,6 +190,13 @@ export class BoardIndex {
         pad,
         sequence: entries.length,
       });
+    const segmentEntries: Record<
+      (typeof BoardDisplay.segmentPasses)[number],
+      Entry[]
+    > = {
+      line: [],
+      arc: [],
+    };
     for (const value of scene.segments) {
       if ((++work & 2047) === 0) yield;
       const object: BoardObject = {
@@ -230,15 +205,24 @@ export class BoardIndex {
         },
         bounds = new SegmentShape(value).bounds();
       this.objects.push(object);
-      add(
+      segmentEntries[value.arc ? "arc" : "line"].push({
         object,
-        value.layer,
-        new SegmentShape(value).displayCategory(),
+        layer: value.layer,
+        category: new SegmentShape(value).displayCategory(),
         bounds,
-      );
+        sequence: 0,
+      });
       const track = this.tracks.get(value.trackId) ?? [];
       track.push(object);
       this.tracks.set(value.trackId, track);
+    }
+    for (const pass of BoardDisplay.segmentPasses) {
+      for (const entry of segmentEntries[pass]) {
+        if ((++work & 2047) === 0) yield;
+        entry.sequence = entries.length;
+        entries.push(entry);
+      }
+      segmentEntries[pass].length = 0;
     }
     for (const value of scene.zones) {
       if ((++work & 2047) === 0) yield;
@@ -249,31 +233,58 @@ export class BoardIndex {
         add(object, value.layer, "zone", bounds);
     }
     const drawingTextOwners = new Map<number, BoardObject>();
+    const drawingChunks = new Map<number, typeof segmentEntries>();
+    function* flushDrawing(chunk: typeof segmentEntries): Generator<void> {
+      for (const pass of BoardDisplay.segmentPasses) {
+        for (const entry of chunk[pass]) {
+          entry.sequence = entries.length;
+          entries.push(entry);
+          if ((++work & 2047) === 0) yield;
+        }
+        chunk[pass].length = 0;
+      }
+    }
     for (const value of scene.drawings ?? []) {
       const object: BoardObject = { kind: "drawing", value };
       this.objects.push(object);
+      let chunk = drawingChunks.get(value.layer);
+      if (!chunk) {
+        chunk = { line: [], arc: [] };
+        drawingChunks.set(value.layer, chunk);
+      }
       for (const segment of value.segments) {
-        entries.push({
+        chunk[segment.arc ? "arc" : "line"].push({
           object,
           layer: value.layer,
           category: "drawing",
           bounds: new SegmentShape(segment).bounds(),
           segment,
-          sequence: entries.length,
+          sequence: 0,
         });
+        if (
+          chunk.line.length + chunk.arc.length ===
+          BoardDisplay.drawingBatchSize
+        )
+          yield* flushDrawing(chunk);
         if ((++work & 2047) === 0) yield;
       }
       for (const text of value.texts) drawingTextOwners.set(text.id, object);
     }
+    for (const chunk of drawingChunks.values()) yield* flushDrawing(chunk);
     // Text submission follows scene.texts, which can differ from owner/graphic
     // chain order. The last visible overlapping stroke must win in both paths.
     if (drawingTextOwners.size)
       for (const text of scene.texts) {
         const object = drawingTextOwners.get(text.id);
         if (object) {
-          const strokes = BoardTextStrokeBuilder.build(text),
+          const strokes: TextStroke[] = [],
             bounds = emptyBounds();
-          for (const stroke of strokes) {
+          for (const stroke of BoardTextStrokeBuilder.buildSteps(text)) {
+            if (!stroke) {
+              yield;
+              continue;
+            }
+            strokes.push(stroke);
             include(bounds, stroke.a, stroke.width / 2);
             include(bounds, stroke.b, stroke.width / 2);
           }
@@ -615,10 +626,7 @@ export class BoardIndex {
     return { anchor, mode: "object", objects: [anchor.object] };
   }
   find(item: SearchItem, display: DisplayOptions): Selection | null {
-    const steps = this.locateSteps(item, display);
-    let step = steps.next();
-    while (!step.done) step = steps.next();
-    return step.value.selection;
+    return completeSteps(this.locateSteps(item, display)).selection;
   }
   *locateSteps(
     item: SearchItem,
@@ -638,22 +646,36 @@ export class BoardIndex {
     const isLaterInDisplayOrder = (
       candidate: number[],
       current: number[] | undefined,
+      sequence: number,
+      currentSequence = -Infinity,
     ) => {
       if (!current) return true;
       for (let i = 0; i < candidate.length; i++)
         if (candidate[i] !== current[i]) return candidate[i] > current[i];
-      return true; // Last source entry wins, matching the stable draw order.
+      return sequence > currentSequence;
     };
     for (const object of objects)
       for (const entry of this.entriesByObject.get(object) ?? []) {
         const entryRank = displayRank(entry);
-        if (isLaterInDisplayOrder(entryRank, lastRank)) {
+        if (
+          isLaterInDisplayOrder(
+            entryRank,
+            lastRank,
+            entry.sequence,
+            lastEntry?.sequence,
+          )
+        ) {
           lastEntry = entry;
           lastRank = entryRank;
         }
         if (
           BoardDisplay.isBatchVisible(display, entry) &&
-          isLaterInDisplayOrder(entryRank, lastVisibleRank)
+          isLaterInDisplayOrder(
+            entryRank,
+            lastVisibleRank,
+            entry.sequence,
+            lastVisibleEntry?.sequence,
+          )
         ) {
           lastVisibleEntry = entry;
           lastVisibleRank = entryRank;
@@ -695,10 +717,7 @@ export function selectionScene(
   scene: BoardScene,
   objects: BoardObject[],
 ): BoardScene {
-  const steps = selectionSceneSteps(scene, objects);
-  let step = steps.next();
-  while (!step.done) step = steps.next();
-  return step.value;
+  return completeSteps(selectionSceneSteps(scene, objects));
 }
 export function* selectionSceneSteps(
   scene: BoardScene,

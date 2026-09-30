@@ -46,6 +46,9 @@ export interface DisplayOptions extends VisibilityOptions, DisplayOrder {
 }
 /** Shared visibility and ordering policy for rendering, labels and picking. */
 export class BoardDisplay {
+  /** Analytic strokes are submitted as straight lines, then arcs in each batch. */
+  static readonly segmentPasses = ["line", "arc"] as const;
+  static readonly drawingBatchSize = 16384;
   static createDisplayOptions(
     drawingLayers: readonly DrawingLayer[] = [],
   ): DisplayOptions {

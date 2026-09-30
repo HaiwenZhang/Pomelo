@@ -12,10 +12,8 @@ export function BoardSearch({
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const results = useMemo(
-    () => new BoardSearchIndex(items).find(query),
-    [items, query],
-  );
+  const index = useMemo(() => new BoardSearchIndex(items), [items]);
+  const results = useMemo(() => index.find(query), [index, query]);
   const locate = (item: SearchItem) => {
     onLocate(item);
     setQuery("");

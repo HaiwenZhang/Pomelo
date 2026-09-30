@@ -4,6 +4,7 @@ import type { LayerFunction } from "../lib/board/model";
 import type { i18n } from "i18next";
 import { additionalParserErrorPatterns } from "./parser-error-catalog";
 import { translations } from "./resources";
+import { ParserError, type VisibleError } from "../lib/parser-error";
 
 const phaseKeys = new Map<string, string>(
   Object.entries(translations["zh-CN"].translation.progress).map(
@@ -51,6 +52,7 @@ const parserErrorPatterns: readonly (readonly [RegExp, string])[] = [
   [/^KiCad 重复铜层 (.+)$/, "kicadDuplicateCopperLayer"],
   [/^KiCad 网络编号无效 (\d+)$/, "kicadInvalidNet"],
   [/^KiCad 网络编号没有定义 (\d+)$/, "kicadUndefinedNet"],
+  [/^KiCad (\S+) 引用未知网络 (\d+)$/, "kicadUnknownObjectNet"],
   [/^KiCad 走线引用未知铜层 (.+)$/, "kicadUnknownTraceLayer"],
   [/^KiCad 焊盘引用未知网络 (\d+)$/, "kicadUnknownPadNet"],
   [/^KiCad 铜区引用未知网络 (\d+)$/, "kicadUnknownZoneNet"],
@@ -207,7 +209,11 @@ export function localizePhase(phase: string, translator: i18n): string {
       : translator.t("progress.working");
 }
 
-export function localizeError(message: string, translator: i18n): string {
+export function localizeError(message: VisibleError, translator: i18n): string {
+  if (message instanceof ParserError)
+    return translator.t("errors.openFailed", {
+      details: message.localize(translator),
+    });
   const key = errorKeys.get(message);
   if (key) return translator.t(key);
   const deviceLost = /^图形设备中断：(.*)$/.exec(message);

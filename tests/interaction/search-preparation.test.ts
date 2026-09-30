@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 
 import type { BoardScene } from "../../src/lib/board/model";
 import { BoardSearchIndex } from "../../src/lib/board/search";
+import type { SearchItem } from "../../src/lib/board/search";
 
 test("prepared search preserves IDs, insertion order, counts and pin/finger component aggregation", async () => {
   const scene = {
@@ -39,6 +40,37 @@ test("prepared search preserves IDs, insertion order, counts and pin/finger comp
     new BoardSearchIndex(actual).find(" data ").map((item) => item.id),
   ).toStrictEqual([4, 2]);
   expect(new BoardSearchIndex(actual).find("u1")).toStrictEqual([expected[5]]);
+});
+
+test("bounded search agrees with full ranking, retaining duplicate IDs and stable ties", () => {
+  const data: SearchItem[] = Array.from({ length: 1000 }, (_, i) => ({
+    kind: "net",
+    id: i,
+    count: 1,
+    name: ["data", "DATA", `data_${1000 - i}`, `x_data_${i}`, `other_${i}`][
+      i % 5
+    ],
+  }));
+  const index = new BoardSearchIndex(data);
+  for (const query of [" data ", "DATA_", "x", "other", "missing", " "])
+    for (const limit of [0, 1, 2, 20, 1000, 2000]) {
+      const text = query.trim().toLocaleLowerCase();
+      const expected = text
+        ? data
+            .map((item) => ({ item, name: item.name.toLocaleLowerCase() }))
+            .filter(({ name }) => name.includes(text))
+            .sort(
+              (a, b) =>
+                Number(b.name === text) - Number(a.name === text) ||
+                Number(b.name.startsWith(text)) -
+                  Number(a.name.startsWith(text)) ||
+                a.name.localeCompare(b.name),
+            )
+            .slice(0, limit)
+            .map(({ item }) => item)
+        : [];
+      expect(index.find(query, limit)).toEqual(expected);
+    }
 });
 
 test("search preparation cancels inside a large group and a fresh retry returns complete counts", async () => {

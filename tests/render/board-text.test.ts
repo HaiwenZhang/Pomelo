@@ -30,6 +30,22 @@ const text = () =>
     metrics,
   );
 
+test("long single texts yield before expanding all strokes, including whitespace-only runs", () => {
+  for (const value of ["A".repeat(10000), " ".repeat(10000)]) {
+    const steps = BoardTextStrokeBuilder.buildSteps({ ...text(), text: value });
+    let strokes = 0;
+    while (true) {
+      const step = steps.next();
+      expect(step.done).toBe(false);
+      if (!step.value) break;
+      strokes++;
+    }
+    expect(strokes).toBeLessThan(10000);
+    steps.return(undefined);
+    expect(steps.next().done).toBe(true);
+  }
+});
+
 test("text properties preserve one-based font, signed coordinates, byte-coded alignment and reversal", () => {
   const t = text();
   expect(t.fontIndex).toBe(3);

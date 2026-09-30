@@ -37,6 +37,42 @@ test("labels reuse uploads for overlays and invalidate for camera, visibility, f
     layout.mockRestore();
   }
 });
+test("composition settings reuse label uploads while layout settings invalidate them", () => {
+  const layout = vi
+    .spyOn(BoardLabelLayout, "layout")
+    .mockReturnValue(new Map());
+  try {
+    const cache = new LabelLayoutCache(),
+      upload = vi.fn();
+    const options = BoardDisplay.createDisplayOptions();
+    const input = {
+      scene: {},
+      font: {},
+      camera: new Camera(),
+      width: 1280,
+      height: 800,
+      options,
+    } as unknown as BoardLabelLayoutInput;
+    expect(cache.update(input, upload)).toBe(true);
+    options.opacity = 0.5;
+    options.activeLayer = 0;
+    options.priorities = [{ layer: 1, category: "etch" }];
+    options.filled = false;
+    options.drills = false;
+    options.backdrills = false;
+    options.boardText = true;
+    expect(cache.update(input, upload)).toBe(false);
+    options.pinNames = false;
+    expect(cache.update(input, upload)).toBe(true);
+    options.shapes = 0;
+    expect(cache.update(input, upload)).toBe(true);
+    options.layerVisibility = new Map([[0, { etch: false }]]);
+    expect(cache.update(input, upload)).toBe(true);
+    expect(upload).toHaveBeenCalledTimes(4);
+  } finally {
+    layout.mockRestore();
+  }
+});
 test("failed upload never marks labels as cached", () => {
   const layout = vi
     .spyOn(BoardLabelLayout, "layout")

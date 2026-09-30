@@ -19,6 +19,11 @@ import { packCopperBatches } from "./copper-batch-packer";
 import { buildSelectionPackets } from "./selection-packet-builder";
 
 import { collectLayerMembers } from "./selection-layer-collector";
+import {
+  appendStroke,
+  STROKE_PACKET,
+  TRIANGLE_PACKET,
+} from "./primitive-layout";
 
 export type PrimitiveBuildOptions =
   | { kind: "scene" }
@@ -58,38 +63,14 @@ export class PrimitiveBatchBuilder {
     color: number[],
     outline = false,
   ): void {
-    const width = outline ? 0 : segment.width;
-    if (segment.arc) {
-      target.push(
-        segment.arc.center[0] - this.originX,
-        segment.arc.center[1] - this.originY,
-        segment.arc.radius,
-        segment.arc.start,
-        width,
-        segment.arc.sweep,
-        1,
-        0,
-        color[0],
-        color[1],
-        color[2],
-        color[3] ?? 1,
-      );
-    } else {
-      target.push(
-        segment.a[0] - this.originX,
-        segment.a[1] - this.originY,
-        segment.b[0] - this.originX,
-        segment.b[1] - this.originY,
-        width,
-        0,
-        0,
-        0,
-        color[0],
-        color[1],
-        color[2],
-        color[3] ?? 1,
-      );
-    }
+    appendStroke(
+      target,
+      segment,
+      this.originX,
+      this.originY,
+      color,
+      outline ? 0 : segment.width,
+    );
   }
 
   private appendPad(
@@ -132,33 +113,37 @@ export class PrimitiveBatchBuilder {
         color[2],
         color[3] ?? 1,
       );
-    else if ([3, 5, 6, 11, 12, 27, 28].includes(pad.type))
+    else if ([3, 5, 6, 11, 12, 27, 28].includes(pad.type)) {
+      const shape = new PadShapeGeometry(pad);
       target.push(
         x,
         y,
         pad.width / 2,
         pad.height / 2,
         angle,
-        new PadShapeGeometry(pad).corner(),
-        hole ? 6 : [3, 28].includes(pad.type) ? 5 : 4,
+        shape.corner(),
+        hole ? 6 : shape.chamfered() ? 5 : 4,
         0,
         color[0],
         color[1],
         color[2],
         color[3] ?? 1,
       );
+    }
   }
 
-  private appendCustomPad(
+  private *appendCustomPad(
     fill: number[],
     edges: number[],
     pad: PadShape,
     owner: PadOwner,
     color: number[],
-  ): void {
+  ): Generator<undefined> {
     const shape = new PadShapeGeometry(pad);
     const mesh = shape.mesh();
+    let work = 0;
     for (const index of mesh.indices) {
+      if ((++work & 4095) === 0) yield;
       const point = shape.toWorld(
         [mesh.points[index * 2], mesh.points[index * 2 + 1]],
         owner,
@@ -172,8 +157,10 @@ export class PrimitiveBatchBuilder {
         color[3] ?? 1,
       );
     }
-    for (const edge of shape.edges(owner))
+    for (const edge of shape.iterateEdges(owner)) {
       this.appendSegment(edges, edge, color, true);
+      if ((++work & 2047) === 0) yield;
+    }
   }
 
   build(): PrimitiveBatch[] {
@@ -374,7 +361,13 @@ export class PrimitiveBatchBuilder {
             if (pad.layer === layer.id) {
               const padColor = this.material(color, pin.net);
               if (pad.custom?.length)
-                this.appendCustomPad(custom, customEdges, pad, pin, padColor);
+                yield* this.appendCustomPad(
+                  custom,
+                  customEdges,
+                  pad,
+                  pin,
+                  padColor,
+                );
               else this.appendPad(pins, pad, pin, padColor);
             }
         }
@@ -404,7 +397,13 @@ export class PrimitiveBatchBuilder {
               if (pad.backdrillBase)
                 this.appendPad(backdrillBasePads, pad, via, padColor);
               else if (pad.custom?.length)
-                this.appendCustomPad(viaCustom, viaEdges, pad, via, padColor);
+                yield* this.appendCustomPad(
+                  viaCustom,
+                  viaEdges,
+                  pad,
+                  via,
+                  padColor,
+                );
               else this.appendPad(pads, pad, via, padColor);
             }
         }
@@ -419,7 +418,11 @@ export class PrimitiveBatchBuilder {
             layer: layer.id,
             category: "via" as const,
             backdrillBase: true,
-            ...(yield* splitPositionSteps(backdrillBasePads, 12, 4)),
+            ...(yield* splitPositionSteps(
+              backdrillBasePads,
+              STROKE_PACKET.stride,
+              STROKE_PACKET.positions,
+            )),
           };
           backdrillBasePads.length = 0;
           yield batch;
@@ -434,9 +437,24 @@ export class PrimitiveBatchBuilder {
         number,
         boolean,
       ][] = [
-        [{ layer: layer.id, category: "zone-outline" }, edges, 12, true],
-        [{ layer: layer.id, category: segmentCategory }, lines, 12, true],
-        [{ layer: layer.id, category: pinCategory }, pins, 12, false],
+        [
+          { layer: layer.id, category: "zone-outline" },
+          edges,
+          STROKE_PACKET.stride,
+          true,
+        ],
+        [
+          { layer: layer.id, category: segmentCategory },
+          lines,
+          STROKE_PACKET.stride,
+          true,
+        ],
+        [
+          { layer: layer.id, category: pinCategory },
+          pins,
+          STROKE_PACKET.stride,
+          false,
+        ],
         [
           {
             layer: layer.id,
@@ -445,16 +463,21 @@ export class PrimitiveBatchBuilder {
             padMode: "filled",
           },
           custom,
-          6,
+          TRIANGLE_PACKET.stride,
           false,
         ],
         [
           { layer: layer.id, category: pinCategory, padMode: "outline" },
           customEdges,
-          12,
+          STROKE_PACKET.stride,
           true,
         ],
-        [{ layer: layer.id, category: "via" }, pads, 12, false],
+        [
+          { layer: layer.id, category: "via" },
+          pads,
+          STROKE_PACKET.stride,
+          false,
+        ],
         [
           {
             layer: layer.id,
@@ -463,13 +486,13 @@ export class PrimitiveBatchBuilder {
             padMode: "filled",
           },
           viaCustom,
-          6,
+          TRIANGLE_PACKET.stride,
           false,
         ],
         [
           { layer: layer.id, category: "via", padMode: "outline" },
           viaEdges,
-          12,
+          STROKE_PACKET.stride,
           true,
         ],
       ];
@@ -505,7 +528,9 @@ export class PrimitiveBatchBuilder {
             ...(yield* splitPositionSteps(
               values,
               stride,
-              stride === 6 ? 2 : 4,
+              stride === TRIANGLE_PACKET.stride
+                ? TRIANGLE_PACKET.positions
+                : STROKE_PACKET.positions,
             )),
           };
           values.length = 0;
@@ -593,7 +618,11 @@ export class PrimitiveBatchBuilder {
           layer: -1,
           category: "drill" as const,
           viaLayers,
-          ...(yield* splitPositionSteps(data, 12, 4)),
+          ...(yield* splitPositionSteps(
+            data,
+            STROKE_PACKET.stride,
+            STROKE_PACKET.positions,
+          )),
         };
         data.length = 0;
         yield batch;
@@ -614,7 +643,11 @@ export class PrimitiveBatchBuilder {
           category: "drill" as const,
           viaLayers,
           backdrill: true,
-          ...(yield* splitPositionSteps(data, 12, 4)),
+          ...(yield* splitPositionSteps(
+            data,
+            STROKE_PACKET.stride,
+            STROKE_PACKET.positions,
+          )),
         };
         data.length = 0;
         yield batch;
